@@ -1,9 +1,6 @@
 import time
 from auth import init_client
-from markets import (
-    fetch_live_games, is_close_game, fetch_nfl_games_today,
-    fetch_cfb_games_today, is_cfb_clutch_game, _fetch_today_games
-)
+from markets import fetch_live_games, fetch_nfl_games_today, fetch_cfb_games_today
 from trader import place_both_sides, monitor_and_cancel, monitor_all
 
 
@@ -39,26 +36,13 @@ def main(test_mode=False):
 
         return  # exit after test run
 
-    # --- LIVE trading loop (NFL + CFB clutch) ---
+    # --- LIVE trading loop (NFL + CFB clutch combined) ---
     traded = set()
     while True:
-        # NFL live games
-        nfl_games = fetch_live_games()
-        nfl_clutch = [(m, ev) for (m, ev) in nfl_games if is_close_game(ev)]
+        live_games = fetch_live_games()  # unified NFL + CFB
+        print(f"Qualified contests: {len(live_games)}")
 
-        # CFB live games
-        cfb_live = _fetch_today_games(100351, "cfb")  # raw pull
-        cfb_clutch = [(m, ev) for (m, ev) in cfb_live if is_cfb_clutch_game(ev)]
-
-        # Apply the bestBid filter
-        qualified = [
-            (m, ev) for (m, ev) in (nfl_clutch + cfb_clutch)
-            if has_reasonable_spread(m)
-        ]
-
-        print(f"Qualified contests: {len(qualified)} (after bestBid filter)")
-
-        for m, ev in qualified:
+        for m, ev in live_games:
             contest_id = m.get("id")
             if contest_id in traded:
                 continue
