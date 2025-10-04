@@ -40,7 +40,7 @@ def is_close_game(ev):
     Game rule: Q4 or 4th, <=5:00 elapsed, score diff <= 6
     """
     period = ev.get("period", "").lower()
-    if period not in ("q4", "4th"):
+    if period not in ("q4", "4th", "4Q"):
         return False
 
     elapsed = ev.get("elapsed")
