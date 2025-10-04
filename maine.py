@@ -74,4 +74,4 @@ def main(test_mode=False):
 
 
 if __name__ == "__main__":
-    main(test_mode=True)   # ✅ flip to False for live trading
+    main(test_mode=False)

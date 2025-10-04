@@ -54,7 +54,7 @@ def place_both_sides(client, market, price=0.16, size=10.0):
         return []
 
 
-def place_resell(client, token_id, size, price=0.50):
+def place_resell(client, token_id, size, price=0.92):
     """
     Place a SELL order for the filled token at given price/size.
     """
