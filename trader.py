@@ -54,40 +54,56 @@ def place_both_sides(client, market, price=0.16, size=10.0):
         return []
 
 
-def place_resell(client, token_id, size, price=0.92, retries=5, delay=6):
+def place_resell(client, token_id, size, price=0.92, max_wait=90, check_interval=5):
     """
-    Place a SELL order for the filled token at given price/size.
-    Retries a few times if balance/allowance not yet available.
+    Wait for filled token balance to appear before posting SELL.
+    Handles Polymarket's delayed balance propagation.
     """
-    for attempt in range(1, retries + 1):
+    from time import sleep, time
+
+    start = time()
+    token_id = str(token_id)
+
+    # Step 1: wait until balance reflects the fill
+    while True:
         try:
-            order_args = OrderArgs(
-                price=price,
-                size=size,
-                side=SELL,
-                token_id=str(token_id),
-            )
-            signed_order = client.create_order(order_args)
-            resp = client.post_order(signed_order)
-            order_id = resp.get("orderID")
-
-            if order_id:
-                print(f"[SELL] Placed SELL for token {token_id} | order {order_id} | size={size} @ {price}")
-                return True
+            bal = client.get_balance(token_id=token_id)
+            avail = float(bal.get("available", 0))
+            if avail >= size:
+                print(f"[READY] Balance available for token {token_id}: {avail}")
+                break
             else:
-                print(f"[FAIL] No orderID returned on SELL attempt {attempt}/{retries}")
+                elapsed = int(time() - start)
+                if elapsed > max_wait:
+                    print(f"[FAIL] Balance not updated after {max_wait}s, skipping SELL for token {token_id}")
+                    return False
+                print(f"[WAIT] Balance={avail}, need {size}. Retrying in {check_interval}s...")
+                sleep(check_interval)
         except Exception as e:
-            msg = str(e)
-            if "not enough balance" in msg or "allowance" in msg:
-                print(f"[WAIT] Balance not ready yet (attempt {attempt}/{retries})... retrying in {delay}s")
-                time.sleep(delay)
-                continue
-            else:
-                print(f"[FAIL] Other error posting SELL for token {token_id}:", e)
-                return False
+            print(f"[WARN] Could not fetch balance ({e}), retrying in {check_interval}s...")
+            sleep(check_interval)
 
-    print(f"[FAIL] Exhausted retries for SELL token {token_id}")
-    return False
+    # Step 2: once balance confirmed, post SELL
+    try:
+        order_args = OrderArgs(
+            price=price,
+            size=size,
+            side=SELL,
+            token_id=token_id,
+        )
+        signed_order = client.create_order(order_args)
+        resp = client.post_order(signed_order)
+        order_id = resp.get("orderID")
+
+        if order_id:
+            print(f"[SELL] Placed SELL for token {token_id} | order {order_id} | size={size} @ {price}")
+            return True
+        else:
+            print(f"[FAIL] No orderID returned for SELL token {token_id}")
+            return False
+    except Exception as e:
+        print(f"[FAIL] Error posting SELL for token {token_id}: {e}")
+        return False
 
 def monitor_and_cancel(client, results):
     """
