@@ -3,39 +3,48 @@ from datetime import date
 
 warnings.filterwarnings("ignore")
 
-def fetch_mlb_markets(tag_id=100381, limit=250):
-    url = "https://gamma-api.polymarket.com/markets"
-    params = {"limit": limit, "closed": "false", "tag_id": tag_id}
-    r = requests.get(url, params=params, timeout=20, verify=False)
+BASE_URL = "https://gamma-api.polymarket.com/markets"
+
+def fetch_today_mlb_cle_contests(tag_id=100639, limit=250):
+    today = date.today().strftime("%Y-%m-%d")
+
+    r = requests.get(
+        BASE_URL,
+        params={"limit": limit, "closed": "false", "tag_id": tag_id},
+        timeout=20,
+        verify=False
+    )
     r.raise_for_status()
     data = r.json()
-    return data["data"] if isinstance(data, dict) else data
-
-if __name__ == "__main__":
-    today = date.today().strftime("%Y-%m-%d")  # e.g. "2025-09-27"
-    mlb_markets = fetch_mlb_markets(limit=250)
+    markets = data["data"] if isinstance(data, dict) else data
 
     filtered = []
-    for m in mlb_markets:
+    for m in markets:
         slug = m.get("slug") or ""
-        if not (slug.startswith("mlb") and slug.endswith(today)):
-            continue  # skip non-today MLB games
+        # must start with mlb, contain "cle", and end with today's date
+        if not (slug.startswith("nfl") and "cle" in slug and slug.endswith(today)):
+            continue
 
-        events = m.get("events", [])
-        for ev in events:
-            if ev.get("live") and ev.get("period") and "9th" not in ev["period"]:
-                filtered.append((m, ev))
+        for ev in m.get("events", []):
+            filtered.append((m, ev))
 
-    print(f"Found {len(filtered)} live MLB contests (today, not in 9th inning)\n")
+    return filtered
 
-    for i, (m, ev) in enumerate(filtered, start=1):
-        print("=" * 60)
+
+if __name__ == "__main__":
+    games = fetch_today_mlb_cle_contests()
+    print(f"Found {len(games)} MLB contests for today with 'cle' in slug\n")
+
+    for i, (m, ev) in enumerate(games, start=1):
+        print("=" * 80)
         print(f"[{i}] {m.get('question')}")
         print(f"Slug: {m.get('slug')}")
         print(f"Condition ID: {m.get('conditionId')}")
+        print(f"clobTokenIds: {m.get('clobTokenIds')}")
         print(f"Live: {ev.get('live')}")
         print(f"Period: {ev.get('period')}")
         print(f"Score: {ev.get('score')}")
         print(f"Start Time: {ev.get('startTime')}")
+        print(f"Liquidity: {m.get('liquidity')}")
         print()
 

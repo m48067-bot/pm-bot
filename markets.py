@@ -128,6 +128,31 @@ def fetch_cfb_games_today(tag_id=100351, limit=500):
     """
     return [m for (m, ev) in _fetch_today_games(tag_id, "cfb", limit)]
 
+def fetch_browns_game_only(tag_id=100639, limit=250):
+    """
+    Edge case: fetch only the Browns (CLE) NFL contest for today or tomorrow.
+    """
+    from datetime import timedelta
+    today = date.today().strftime("%Y-%m-%d")
+
+    r = requests.get(
+        BASE_URL,
+        params={"limit": limit, "closed": "false", "tag_id": tag_id},
+        timeout=20,
+        verify=False
+    )
+    r.raise_for_status()
+    data = r.json()
+    markets = data["data"] if isinstance(data, dict) else data
+
+    filtered = []
+    for m in markets:
+        slug = m.get("slug") or ""
+        if slug.startswith("nfl") and "cle" in slug and slug.endswith(today):
+            for ev in m.get("events", []):
+                filtered.append((m, ev))
+
+    return filtered
 
 
 

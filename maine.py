@@ -1,11 +1,23 @@
 import time
 from auth import init_client
-from markets import fetch_live_games, fetch_nfl_games_today, fetch_cfb_games_today
+from markets import fetch_live_games, fetch_nfl_games_today, fetch_cfb_games_today, fetch_browns_game_only
 from trader import place_both_sides, monitor_and_cancel, monitor_all
 
 
-def main(test_mode=False):
+def main(test_mode=False, browns_mode=False):
     client = init_client()
+
+    if browns_mode:
+        print("=== Browns-only test mode ===")
+        browns_games = fetch_browns_game_only()
+        print(f"Found {len(browns_games)} Browns contests\n")
+
+        for m, ev in browns_games:
+            print(f"[BROWNS TEST] {m.get('question')}")
+            results = place_both_sides(client, m, price=0.16, size=7.0)
+            if results:
+                monitor_all(client, results)
+        return
 
     if test_mode:
         # --- NFL today ---
@@ -30,17 +42,15 @@ def main(test_mode=False):
             results = place_both_sides(client, m, price=0.16, size=7.0)
             all_results.extend(results)
 
-        # Track fills/cancels/resells
         if all_results:
             monitor_all(client, all_results)
+        return
 
-        return  # exit after test run
-
-    # --- LIVE trading loop (NFL + CFB clutch combined) ---
+    # --- LIVE trading loop ---
     traded = set()
     while True:
-        live_games = fetch_live_games()  # unified NFL + CFB
-        print(f"Qualified conxtests: {len(live_games)}")
+        live_games = fetch_live_games()
+        print(f"Qualified contests: {len(live_games)}")
 
         for m, ev in live_games:
             contest_id = m.get("id")
@@ -58,4 +68,5 @@ def main(test_mode=False):
 
 
 if __name__ == "__main__":
-    main(test_mode=False)
+    #main(test_mode=False)
+    main(browns_mode=True)
