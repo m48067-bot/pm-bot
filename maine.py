@@ -14,7 +14,7 @@ def main(test_mode=False, browns_mode=False):
 
         for m, ev in browns_games:
             print(f"[BROWNS TEST] {m.get('question')}")
-            results = place_both_sides(client, m, price=0.16, size=7.0)
+            results = place_both_sides(client, m, price=0.5, size=2.0)
             if results:
                 monitor_all(client, results)
         return
