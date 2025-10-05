@@ -1,4 +1,5 @@
 import time
+import threading
 from auth import init_client
 from markets import fetch_live_games, fetch_nfl_games_today, fetch_cfb_games_today, fetch_browns_game_only
 from trader import place_both_sides, monitor_and_cancel, monitor_all
@@ -51,7 +52,7 @@ def main(test_mode=False, browns_mode=False):
             monitor_all(client, all_results)
         return
 
-    # --- LIVE trading loop ---
+    # --- LIVE trading loop (multi-threaded) ---
     traded = set()
     while True:
         live_games = fetch_live_games()
@@ -62,16 +63,28 @@ def main(test_mode=False, browns_mode=False):
             if contest_id in traded:
                 continue
 
-            print(f"\n[TRADE] {m.get('question')} | Score {ev.get('score')} | Period {ev.get('period')} | Elapsed {ev.get('elapsed')}")
-            results = place_both_sides(client, m, price=0.16, size=70.0)
+            question = m.get("question")
+            score = ev.get("score")
+            period = ev.get("period")
+            elapsed = ev.get("elapsed")
+
+            print(f"\n[{contest_id}] [TRADE] {question} | Score {score} | Period {period} | Elapsed {elapsed}")
+            results = place_both_sides(client, m, price=0.16, size=35.0)
+
             if results:
-                done = monitor_and_cancel(client, results)
-                if done:
-                    traded.add(contest_id)
+                # Launch a background thread to monitor and manage fills for this contest
+                t = threading.Thread(target=monitor_and_cancel, args=(client, results), name=f"contest_{contest_id}")
+                t.daemon = True  # ensures threads close automatically if main script stops
+                t.start()
+
+                # Mark contest as traded so we don’t re-enter
+                traded.add(contest_id)
+                print(f"[{contest_id}] [THREAD] Started monitoring thread for {question}")
 
         time.sleep(30)
 
 
 if __name__ == "__main__":
     main(test_mode=False)
-    #main(browns_mode=True)
+    # main(browns_mode=True)
+
