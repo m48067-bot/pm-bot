@@ -66,13 +66,13 @@ def is_close_game(ev):
 
 def has_reasonable_spread(market):
     """
-    Require bestBid between 0.05 and 0.95.
+    Require bestBid between 0.10 and 0.90.
     """
     try:
         best_bid = float(market.get("bestBid", 0))
     except Exception:
         return False
-    return 0.05 <= best_bid <= 0.95
+    return 0.10 <= best_bid <= 0.90
 
 
 # --- Combined live clutch fetcher ---

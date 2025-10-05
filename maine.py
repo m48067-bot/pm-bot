@@ -40,7 +40,7 @@ def main(test_mode=False):
     traded = set()
     while True:
         live_games = fetch_live_games()  # unified NFL + CFB
-        print(f"Qualified contests: {len(live_games)}")
+        print(f"Qualified conxtests: {len(live_games)}")
 
         for m, ev in live_games:
             contest_id = m.get("id")
@@ -48,7 +48,7 @@ def main(test_mode=False):
                 continue
 
             print(f"\n[TRADE] {m.get('question')} | Score {ev.get('score')} | Period {ev.get('period')} | Elapsed {ev.get('elapsed')}")
-            results = place_both_sides(client, m, price=0.16, size=7.0)
+            results = place_both_sides(client, m, price=0.16, size=35.0)
             if results:
                 done = monitor_and_cancel(client, results)
                 if done:
