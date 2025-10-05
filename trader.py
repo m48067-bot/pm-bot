@@ -54,27 +54,40 @@ def place_both_sides(client, market, price=0.16, size=10.0):
         return []
 
 
-def place_resell(client, token_id, size, price=0.92):
+def place_resell(client, token_id, size, price=0.92, retries=5, delay=3):
     """
     Place a SELL order for the filled token at given price/size.
+    Retries a few times if balance/allowance not yet available.
     """
-    try:
-        order_args = OrderArgs(
-            price=price,
-            size=size,
-            side=SELL,
-            token_id=str(token_id),
-        )
-        signed_order = client.create_order(order_args)
-        resp = client.post_order(signed_order)
-        order_id = resp.get("orderID")
-        if order_id:
-            print(f"[SELL] Placed SELL for token {token_id} | order {order_id} | size={size} @ {price}")
-        else:
-            print(f"[FAIL] No orderID returned for SELL {token_id}")
-    except Exception as e:
-        print(f"[FAIL] Error posting SELL for token {token_id}", e)
+    for attempt in range(1, retries + 1):
+        try:
+            order_args = OrderArgs(
+                price=price,
+                size=size,
+                side=SELL,
+                token_id=str(token_id),
+            )
+            signed_order = client.create_order(order_args)
+            resp = client.post_order(signed_order)
+            order_id = resp.get("orderID")
 
+            if order_id:
+                print(f"[SELL] Placed SELL for token {token_id} | order {order_id} | size={size} @ {price}")
+                return True
+            else:
+                print(f"[FAIL] No orderID returned on SELL attempt {attempt}/{retries}")
+        except Exception as e:
+            msg = str(e)
+            if "not enough balance" in msg or "allowance" in msg:
+                print(f"[WAIT] Balance not ready yet (attempt {attempt}/{retries})... retrying in {delay}s")
+                time.sleep(delay)
+                continue
+            else:
+                print(f"[FAIL] Other error posting SELL for token {token_id}:", e)
+                return False
+
+    print(f"[FAIL] Exhausted retries for SELL token {token_id}")
+    return False
 
 def monitor_and_cancel(client, results):
     """
