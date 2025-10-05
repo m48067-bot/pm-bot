@@ -16,7 +16,7 @@ def main(test_mode=False, browns_mode=False):
                 if contest_id in traded:
                     continue
 
-                results = place_both_sides(client, m, price=0.5, size=5.0)
+                results = place_both_sides(client, m, price=0.3, size=5.0)
                 if results:
                     done = monitor_and_cancel(client, results)
                     if done:
@@ -73,5 +73,5 @@ def main(test_mode=False, browns_mode=False):
 
 
 if __name__ == "__main__":
-    main(test_mode=False)
-    #main(browns_mode=True)
+    #main(test_mode=False)
+    main(browns_mode=True)
