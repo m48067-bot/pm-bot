@@ -8,28 +8,21 @@ def main(test_mode=False, browns_mode=False):
     client = init_client()
 
     if browns_mode:
-        print("=== Browns-only live-style mode ===")
-        browns_games = fetch_browns_game_only()
-        print(f"Found {len(browns_games)} Browns contests\n")
-
         traded = set()
+        while True:
+            browns_games = fetch_browns_game_only()
+            for m, ev in browns_games:
+                contest_id = m.get("id")
+                if contest_id in traded:
+                    continue
 
-        for m, ev in browns_games:
-            contest_id = m.get("id")
-            if contest_id in traded:
-                continue
+                results = place_both_sides(client, m, price=0.5, size=5.0)
+                if results:
+                    done = monitor_and_cancel(client, results)
+                    if done:
+                        traded.add(contest_id)
 
-            print(f"\n[TRADE] {m.get('question')} | Score {ev.get('score')} | Period {ev.get('period')}")
-
-            # Place both sides exactly like live mode
-            results = place_both_sides(client, m, price=0.5, size=5.0)
-            if results:
-                done = monitor_and_cancel(client, results)
-                if done:
-                    traded.add(contest_id)
-
-        print("\n✅ Browns-only live-style session complete — exiting.\n")
-        return
+            time.sleep(30)
 
     if test_mode:
         # --- NFL today ---
