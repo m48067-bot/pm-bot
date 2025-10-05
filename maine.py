@@ -8,20 +8,27 @@ def main(test_mode=False, browns_mode=False):
     client = init_client()
 
     if browns_mode:
+        print("=== Browns-only live-style mode ===")
         browns_games = fetch_browns_game_only()
-        print(f"Browns contests found: {len(browns_games)}")
+        print(f"Found {len(browns_games)} Browns contests\n")
 
-        all_results = []
+        traded = set()
 
         for m, ev in browns_games:
-            print(f"\n[TRADE-TEST BROWNS] {m.get('question')}")
+            contest_id = m.get("id")
+            if contest_id in traded:
+                continue
+
+            print(f"\n[TRADE] {m.get('question')} | Score {ev.get('score')} | Period {ev.get('period')}")
+
+            # Place both sides exactly like live mode
             results = place_both_sides(client, m, price=0.5, size=5.0)
-            all_results.extend(results)
+            if results:
+                done = monitor_and_cancel(client, results)
+                if done:
+                    traded.add(contest_id)
 
-        if all_results:
-            monitor_all(client, all_results)
-
-        print("\n✅ Browns-only test mode complete — exiting.\n")
+        print("\n✅ Browns-only live-style session complete — exiting.\n")
         return
 
     if test_mode:
@@ -73,5 +80,5 @@ def main(test_mode=False, browns_mode=False):
 
 
 if __name__ == "__main__":
-    main(test_mode=True)
-    #main(browns_mode=True)
+    #main(test_mode=True)
+    main(browns_mode=True)
