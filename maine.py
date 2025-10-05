@@ -73,5 +73,5 @@ def main(test_mode=False, browns_mode=False):
 
 
 if __name__ == "__main__":
-    #main(test_mode=True)
-    main(browns_mode=True)
+    main(test_mode=False)
+    #main(browns_mode=True)
