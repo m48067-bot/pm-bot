@@ -63,7 +63,7 @@ def main(test_mode=False, browns_mode=False):
                 continue
 
             print(f"\n[TRADE] {m.get('question')} | Score {ev.get('score')} | Period {ev.get('period')} | Elapsed {ev.get('elapsed')}")
-            results = place_both_sides(client, m, price=0.16, size=35.0)
+            results = place_both_sides(client, m, price=0.16, size=70.0)
             if results:
                 done = monitor_and_cancel(client, results)
                 if done:
