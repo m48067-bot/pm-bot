@@ -12,11 +12,24 @@ def main(test_mode=False, browns_mode=False):
         browns_games = fetch_browns_game_only()
         print(f"Found {len(browns_games)} Browns contests\n")
 
+        all_results = []
+        traded = set()
+
         for m, ev in browns_games:
+            contest_id = m.get("id")
+            if contest_id in traded:
+                continue
+
             print(f"[BROWNS TEST] {m.get('question')}")
             results = place_both_sides(client, m, price=0.5, size=5.0)
             if results:
-                monitor_all(client, results)
+                all_results.extend(results)
+                traded.add(contest_id)
+
+        if all_results:
+            monitor_all(client, all_results)
+
+        print("\n✅ Browns-only mode complete — exiting.\n")
         return
 
     if test_mode:
