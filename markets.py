@@ -148,7 +148,7 @@ def fetch_browns_game_only(tag_id=100639, limit=250):
     filtered = []
     for m in markets:
         slug = m.get("slug") or ""
-        if slug.startswith("nfl") and "cle" in slug and slug.endswith(today):
+        if slug.startswith("nfl") and "ind" in slug and slug.endswith(today):
             for ev in m.get("events", []):
                 filtered.append((m, ev))
 
