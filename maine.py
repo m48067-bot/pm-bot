@@ -69,7 +69,7 @@ def main(test_mode=False, browns_mode=False):
             elapsed = ev.get("elapsed")
 
             print(f"\n[{contest_id}] [TRADE] {question} | Score {score} | Period {period} | Elapsed {elapsed}")
-            results = place_both_sides(client, m, price=0.16, size=35.0)
+            results = place_both_sides(client, m, price=0.16, size=7.0)
 
             if results:
                 # Launch a background thread to monitor and manage fills for this contest
