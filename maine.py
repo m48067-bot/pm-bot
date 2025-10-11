@@ -58,7 +58,7 @@ def main(test_mode=False, browns_mode=False):
     traded = set()
     MAX_WORKERS = 8  # number of contests to trade simultaneously
     ENTRY_PRICE = 0.34
-    ENTRY_SIZE = 3.0
+    ENTRY_SIZE = 5.0
 
     executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 

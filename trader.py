@@ -42,10 +42,10 @@ def place_both_sides(client, market, price=0.16, size=10.0):
             token_id = token_ids[i]
             order_id = r.get("orderID")
             if order_id:
-                print(f"[OK] Placed BUY for {question} | token_id={token_id}")
+                print(f"[OK] [{question}] Placed BUY | token_id={token_id} | order_id={order_id} | size={size}")
                 results.append((contest_id, token_id, order_id, BUY, size))
             else:
-                print(f"[FAIL] Order failed for {question} | token_id={token_id}")
+                print(f"[FAIL] [{question}] Order failed | token_id={token_id}")
         return results
 
     except Exception as e:
@@ -54,7 +54,7 @@ def place_both_sides(client, market, price=0.16, size=10.0):
         return []
 
 
-def place_resell(client, token_id, size, price=0.92, retries=20, delay=5):
+def place_resell(client, token_id, size, question="Unknown Contest", price=0.92, retries=20, delay=5):
     """
     Try to place a SELL order for the filled token at given price/size.
     Retries while waiting for Polymarket's allowance ledger to sync.
@@ -82,7 +82,7 @@ def place_resell(client, token_id, size, price=0.92, retries=20, delay=5):
             order_id = resp.get("orderID") if isinstance(resp, dict) else None
 
             if order_id:
-                print(f"[SELL] SUCCESS | token {token_id} | order {order_id} | size={size} @ {price}")
+                print(f"[RESALE OK] [{question}] | token {token_id} | order {order_id} | size={size} @ {price}")
                 return True
             else:
                 print(f"[FAIL] No orderID returned (resp={resp}) on attempt {attempt}/{retries}")
@@ -116,7 +116,7 @@ def monitor_and_cancel(client, results):
                 print(f"[DEBUG] Order {order_id} | contest {contest_id} | token {token_id} | status={status}")
 
                 if status == "filled" or status == "MATCHED":
-                    print(f"[FILL] Order {order_id} filled on {side}")
+                    print(f"[FILL] [{order_info.get('question', 'Unknown')}] | order {order_id} | side={side}")
                     filled = True
                     # cancel other orders
                     for cid, tid, oid, _, _ in results:
@@ -127,7 +127,7 @@ def monitor_and_cancel(client, results):
                             except Exception as ce:
                                 print(f"[FAIL] Cancel {oid}", ce)
                     # resell
-                    place_resell(client, token_id, sz)
+                    place_resell(client, token_id, sz, question=order_info.get("question", "Unknown"))
                     break
             except Exception as e:
                 print(f"[FAIL] Could not fetch order {order_id}", e)
