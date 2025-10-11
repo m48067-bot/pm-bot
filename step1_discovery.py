@@ -5,7 +5,7 @@ warnings.filterwarnings("ignore")
 
 BASE_URL = "https://gamma-api.polymarket.com/markets"
 
-def fetch_today_live_games(tag_id=100381, limit=250):
+def fetch_today_live_games(tag_id=100639, limit=250):
     today = date.today().strftime("%Y-%m-%d")
     r = requests.get(
         BASE_URL,
@@ -20,7 +20,7 @@ def fetch_today_live_games(tag_id=100381, limit=250):
     filtered = []
     for m in markets:
         slug = m.get("slug") or ""
-        if not (slug.startswith("mlb") and slug.endswith(today)):
+        if not (slug.startswith("nba") and slug.endswith(today)):
             continue
 
         for ev in m.get("events", []):
