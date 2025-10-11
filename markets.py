@@ -106,81 +106,12 @@ def fetch_clutch_games(tag_id, prefix):
 
 
 # --- Public interface used by maine.py ---
-def fetch_live_games(tag_id_nfl=100639, tag_id_cfb=100351):
+def fetch_live_games(tag_id_nfl=100639):
     """
     Fetch both NFL + CFB clutch contests using same filters.
     """
     nfl_clutch = fetch_clutch_games(tag_id_nfl, "nfl")
-    cfb_clutch = fetch_clutch_games(tag_id_cfb, "cfb")
-    return nfl_clutch + cfb_clutch
-
-
-def fetch_nfl_games_today(tag_id=100639, limit=250):
-    """
-    Fetch all NFL contests scheduled today (no filters).
-    """
-    return [m for (m, ev) in _fetch_today_games(tag_id, "nfl", limit)]
-
-
-def fetch_cfb_games_today(tag_id=100351, limit=500):
-    """
-    Fetch all CFB contests scheduled today (no filters).
-    """
-    return [m for (m, ev) in _fetch_today_games(tag_id, "cfb", limit)]
-
-def fetch_browns_game_only(tag_id=100639, limit=250):
-    """
-    Edge case: fetch only the Browns (CLE) NFL contest for today or tomorrow.
-    """
-    from datetime import timedelta
-    today = date.today().strftime("%Y-%m-%d")
-
-    r = requests.get(
-        BASE_URL,
-        params={"limit": limit, "closed": "false", "tag_id": tag_id},
-        timeout=20,
-        verify=False
-    )
-    r.raise_for_status()
-    data = r.json()
-    markets = data["data"] if isinstance(data, dict) else data
-
-    filtered = []
-    for m in markets:
-        slug = m.get("slug") or ""
-        if slug.startswith("nfl") and "ind" in slug and slug.endswith(today):
-            for ev in m.get("events", []):
-                filtered.append((m, ev))
-
-    return filtered
-
-def fetch_cfb_second_quarter(tag_id=100351, limit=500):
-    """
-    Fetch all CFB contests currently in 2nd quarter (for concurrency stress test).
-    """
-    today = date.today().strftime("%Y-%m-%d")
-    r = requests.get(
-        BASE_URL,
-        params={"limit": limit, "closed": "false", "tag_id": tag_id},
-        timeout=20,
-        verify=False
-    )
-    r.raise_for_status()
-    data = r.json()
-    markets = data["data"] if isinstance(data, dict) else data
-
-    second_quarter = []
-    for m in markets:
-        slug = m.get("slug") or ""
-        if not (slug.startswith("cfb") and slug.endswith(today)):
-            continue
-        for ev in m.get("events", []):
-            period = ev.get("period", "").lower()
-            if period in ("q2", "2q", "2nd"):
-                second_quarter.append((m, ev))
-
-    return second_quarter
-
+    return nfl_clutch
 
 
 
