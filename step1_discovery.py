@@ -31,7 +31,7 @@ def fetch_today_live_games(tag_id=100639, limit=250):
 
 if __name__ == "__main__":
     games = fetch_today_live_games()
-    print(f"Found {len(games)} live MLB games (today, not in 9th or Final)\n")
+    print(f"Found {len(games)} live MLB games (today, not inn 9th or Final)\n")
 
     for i, (m, ev) in enumerate(games, start=1):
         print("=" * 60)
