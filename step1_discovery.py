@@ -1,15 +1,27 @@
-import requests, warnings
+import requests
+import warnings
 from datetime import date
 
 warnings.filterwarnings("ignore")
 
 BASE_URL = "https://gamma-api.polymarket.com/markets"
 
-def fetch_today_live_games(tag_id=100639, limit=250):
+def fetch_today_nba_games(tag_id=745, limit=500):
+    """
+    Broad NBA discovery for today's games:
+    - Uses tag 745 (NBA)
+    - Must end with today's date (YYYY-MM-DD)
+    - Soft filters: no period/live restrictions
+    """
     today = date.today().strftime("%Y-%m-%d")
+
     r = requests.get(
         BASE_URL,
-        params={"limit": limit, "closed": "false", "tag_id": tag_id},
+        params={
+            "limit": limit,
+            "closed": "false",
+            "tag_id": tag_id
+        },
         timeout=20,
         verify=False
     )
@@ -19,22 +31,26 @@ def fetch_today_live_games(tag_id=100639, limit=250):
 
     filtered = []
     for m in markets:
-        slug = m.get("slug") or ""
-        if not (slug.startswith("nba") and slug.endswith(today)):
+        slug = (m.get("slug") or "").lower()
+
+        # Must contain "nba" and end with today's date
+        if "nba" not in slug:
+            continue
+        if not slug.endswith(today):
             continue
 
         for ev in m.get("events", []):
-            if ev.get("live") and ev.get("period") and "9th" not in ev["period"] and "Final" not in ev["period"]:
-                filtered.append((m, ev))
+            filtered.append((m, ev))
 
     return filtered
 
+
 if __name__ == "__main__":
-    games = fetch_today_live_games()
-    print(f"Found {len(games)} live MLB games (today, not inn 9th or Final)\n")
+    games = fetch_today_nba_games()
+    print(f"Found {len(games)} NBA-tag markets ending with today's date (tag 745)\n")
 
     for i, (m, ev) in enumerate(games, start=1):
-        print("=" * 60)
+        print("=" * 70)
         print(f"[{i}] {m.get('question')}")
         print(f"Slug: {m.get('slug')}")
         print(f"Condition ID: {m.get('conditionId')}")

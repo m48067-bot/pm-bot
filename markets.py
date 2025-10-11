@@ -113,5 +113,32 @@ def fetch_live_games(tag_id_nfl=100639):
     nfl_clutch = fetch_clutch_games(tag_id_nfl, "nfl")
     return nfl_clutch
 
+def fetch_live_nba_games(tag_id_nba=745):
+    """
+    Fetch all NBA contests that are live today.
+    Must end with today's date.
+    """
+    today = date.today().strftime("%Y-%m-%d")
+    r = requests.get(
+        BASE_URL,
+        params={"limit": 500, "closed": "false", "tag_id": tag_id_nba},
+        timeout=20,
+        verify=False
+    )
+    r.raise_for_status()
+    data = r.json()
+    markets = data["data"] if isinstance(data, dict) else data
+
+    live_games = []
+    for m in markets:
+        slug = (m.get("slug") or "").lower()
+        if "nba" not in slug or not slug.endswith(today):
+            continue
+        for ev in m.get("events", []):
+            if ev.get("live"):
+                live_games.append((m, ev))
+    return live_games
+
+
 
 
