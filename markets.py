@@ -154,5 +154,33 @@ def fetch_browns_game_only(tag_id=100639, limit=250):
 
     return filtered
 
+def fetch_cfb_second_quarter(tag_id=100351, limit=500):
+    """
+    Fetch all CFB contests currently in 2nd quarter (for concurrency stress test).
+    """
+    today = date.today().strftime("%Y-%m-%d")
+    r = requests.get(
+        BASE_URL,
+        params={"limit": limit, "closed": "false", "tag_id": tag_id},
+        timeout=20,
+        verify=False
+    )
+    r.raise_for_status()
+    data = r.json()
+    markets = data["data"] if isinstance(data, dict) else data
+
+    second_quarter = []
+    for m in markets:
+        slug = m.get("slug") or ""
+        if not (slug.startswith("cfb") and slug.endswith(today)):
+            continue
+        for ev in m.get("events", []):
+            period = ev.get("period", "").lower()
+            if period in ("q2", "2q", "2nd"):
+                second_quarter.append((m, ev))
+
+    return second_quarter
+
+
 
 

@@ -3,6 +3,8 @@ import threading
 from auth import init_client
 from markets import fetch_live_games, fetch_nfl_games_today, fetch_cfb_games_today, fetch_browns_game_only
 from trader import place_both_sides, monitor_and_cancel, monitor_all
+from concurrent.futures import ThreadPoolExecutor
+from markets import fetch_cfb_second_quarter  # we'll add this helper in markets.py
 
 
 def main(test_mode=False, browns_mode=False):
@@ -54,34 +56,48 @@ def main(test_mode=False, browns_mode=False):
 
     # --- LIVE trading loop (multi-threaded) ---
     traded = set()
+    MAX_WORKERS = 8  # number of contests to trade simultaneously
+    ENTRY_PRICE = 0.34
+    ENTRY_SIZE = 3.0
+
+    executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
+
+    def handle_contest(client, m, ev):
+        """Handle one contest from start to finish in its own thread."""
+        cid = m.get("id")
+        question = m.get("question")
+        score = ev.get("score")
+        period = ev.get("period")
+        elapsed = ev.get("elapsed")
+
+        print(f"\n[{cid}] Launching handler | {question} | Score {score} | Period {period} | Elapsed {elapsed}")
+        results = place_both_sides(client, m, price=ENTRY_PRICE, size=ENTRY_SIZE)
+        if results:
+            monitor_and_cancel(client, results)
+        print(f"[{cid}] Finished thread for {question}")
+
     while True:
-        live_games = fetch_live_games()
-        print(f"Qualified contests: {len(live_games)}")
+        try:
+            # --- Fetch CFB games currently in 2Q ---
+            games = fetch_cfb_second_quarter()
+            print(f"Found {len(games)} contests currently in 2Q.")
 
-        for m, ev in live_games:
-            contest_id = m.get("id")
-            if contest_id in traded:
-                continue
+            for m, ev in games:
+                cid = m.get("id")
+                if cid in traded:
+                    continue
 
-            question = m.get("question")
-            score = ev.get("score")
-            period = ev.get("period")
-            elapsed = ev.get("elapsed")
+                # Submit each qualifying contest to thread pool
+                executor.submit(handle_contest, client, m, ev)
+                traded.add(cid)
+                print(f"[{cid}] Submitted to thread pool.")
 
-            print(f"\n[{contest_id}] [TRADE] {question} | Score {score} | Period {period} | Elapsed {elapsed}")
-            results = place_both_sides(client, m, price=0.16, size=7.0)
+            # small delay before next refresh
+            time.sleep(25)
 
-            if results:
-                # Launch a background thread to monitor and manage fills for this contest
-                t = threading.Thread(target=monitor_and_cancel, args=(client, results), name=f"contest_{contest_id}")
-                t.daemon = True  # ensures threads close automatically if main script stops
-                t.start()
-
-                # Mark contest as traded so we don’t re-enter
-                traded.add(contest_id)
-                print(f"[{contest_id}] [THREAD] Started monitoring thread for {question}")
-
-        time.sleep(30)
+        except Exception as e:
+            print("[ERROR in main loop]", e)
+            time.sleep(10)
 
 
 if __name__ == "__main__":
