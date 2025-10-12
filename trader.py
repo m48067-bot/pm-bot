@@ -102,7 +102,7 @@ def place_resell(client, token_id, size, question="Unknown Contest", price=0.92,
     print(f"[FAIL] Exhausted {retries} retries (~{retries * delay}s total) for SELL token {token_id}")
     return False
 
-def monitor_and_cancel(client, results):
+def monitor_and_cancel(client, results, resell_price=None):
     """
     Poll orders. When one fills, cancel the rest and place a resell.
     """
@@ -127,7 +127,16 @@ def monitor_and_cancel(client, results):
                             except Exception as ce:
                                 print(f"[FAIL] Cancel {oid}", ce)
                     # resell
-                    place_resell(client, token_id, sz, question=order_info.get("question", "Unknown"))
+                    if resell_price is not None:
+                        place_resell(
+                            client,
+                            token_id,
+                            sz,
+                            question=order_info.get("question", "Unknown"),
+                            price=resell_price
+                        )
+                    else:
+                        print(f"[INFO] Skipping resell for {order_info.get('question', 'Unknown')} (no resell_price set)")
                     break
             except Exception as e:
                 print(f"[FAIL] Could not fetch order {order_id}", e)

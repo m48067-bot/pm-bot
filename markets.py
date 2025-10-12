@@ -1,48 +1,36 @@
 import requests, warnings
-from datetime import date
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 warnings.filterwarnings("ignore")
-
 BASE_URL = "https://gamma-api.polymarket.com/markets"
 
+# --- Pacific date helper ---
+def pacific_today():
+    """Return YYYY-MM-DD string in Pacific time."""
+    return datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
 
 # --- Shared helper ---
 def _fetch_today_games(tag_id, prefix, limit=500):
-    """
-    Fetch contests for today matching a given slug prefix (e.g., 'nfl' or 'cfb').
-    """
-    today = date.today().strftime("%Y-%m-%d")
-    r = requests.get(
-        BASE_URL,
-        params={"limit": limit, "closed": "false", "tag_id": tag_id},
-        timeout=20,
-        verify=False
-    )
+    today = pacific_today()
+    r = requests.get(BASE_URL,
+                     params={"limit": limit, "closed": "false", "tag_id": tag_id},
+                     timeout=20, verify=False)
     r.raise_for_status()
-    data = r.json()
-    markets = data["data"] if isinstance(data, dict) else data
-
+    markets = r.json()["data"]
     filtered = []
     for m in markets:
         slug = m.get("slug") or ""
-        if not (slug.startswith(prefix) and slug.endswith(today)):
-            continue
-
-        for ev in m.get("events", []):
-            filtered.append((m, ev))
-
+        if slug.startswith(prefix) and slug.endswith(today):
+            for ev in m.get("events", []):
+                filtered.append((m, ev))
     return filtered
-
 
 # --- Game condition logic ---
 def is_close_game(ev):
-    """
-    Game rule: Q4 or 4th, <=5:00 elapsed, score diff <= 6
-    """
     period = ev.get("period", "").lower()
     if period not in ("q4", "4th", "4q"):
         return False
-
     elapsed = ev.get("elapsed")
     if not elapsed:
         return False
@@ -50,9 +38,8 @@ def is_close_game(ev):
         mins, secs = map(int, elapsed.split(":"))
     except Exception:
         return False
-    if mins > 5 or (mins == 5 and secs > 0):
+    if mins > 6 or (mins == 6 and secs > 0):
         return False
-
     score = ev.get("score")
     if not score or "-" not in score:
         return False
@@ -60,84 +47,65 @@ def is_close_game(ev):
         a, b = map(int, score.split("-"))
     except Exception:
         return False
-
     return abs(a - b) <= 6
 
-
-def has_reasonable_spread(market):
-    """
-    Require bestBid between 0.10 and 0.90.
-    """
+def has_reasonable_spread(m):
     try:
-        best_bid = float(market.get("bestBid", 0))
+        bid = float(m.get("bestBid", 0))
     except Exception:
         return False
-    return 0.10 <= best_bid <= 0.90
+    return 0.10 <= bid <= 0.90
 
-
-# --- Combined live clutch fetcher ---
+# --- Clutch (NFL/CFB) fetcher ---
 def fetch_clutch_games(tag_id, prefix):
-    """
-    Generic fetcher for live clutch games (NFL, CFB, etc.)
-    """
-    today = date.today().strftime("%Y-%m-%d")
-    r = requests.get(
-        BASE_URL,
-        params={"limit": 500, "closed": "false", "tag_id": tag_id},
-        timeout=20,
-        verify=False
-    )
-    r.raise_for_status()
-    data = r.json()
-    markets = data["data"] if isinstance(data, dict) else data
-
-    clutch_markets = []
+    today = pacific_today()
+    r = requests.get(BASE_URL,
+                     params={"limit": 500, "closed": "false", "tag_id": tag_id},
+                     timeout=20, verify=False)
+    markets = r.json()["data"]
+    clutch = []
     for m in markets:
         slug = m.get("slug") or ""
-        if not (slug.startswith(prefix) and slug.endswith(today)):
-            continue
-        if not has_reasonable_spread(m):
-            continue
-        for ev in m.get("events", []):
-            if ev.get("live") and is_close_game(ev):
-                clutch_markets.append((m, ev))
+        if slug.startswith(prefix) and slug.endswith(today) and has_reasonable_spread(m):
+            for ev in m.get("events", []):
+                if ev.get("live") and is_close_game(ev):
+                    clutch.append((m, ev))
+    return clutch
 
-    return clutch_markets
-
-
-# --- Public interface used by maine.py ---
+# --- Public interfaces ---
 def fetch_live_games(tag_id_nfl=100639):
-    """
-    Fetch both NFL + CFB clutch contests using same filters.
-    """
-    nfl_clutch = fetch_clutch_games(tag_id_nfl, "nfl")
-    return nfl_clutch
+    return fetch_clutch_games(tag_id_nfl, "nfl")
 
 def fetch_live_nba_games(tag_id_nba=745):
-    """
-    Fetch all NBA contests that are live today.
-    Must end with today's date.
-    """
-    today = date.today().strftime("%Y-%m-%d")
-    r = requests.get(
-        BASE_URL,
-        params={"limit": 500, "closed": "false", "tag_id": tag_id_nba},
-        timeout=20,
-        verify=False
-    )
-    r.raise_for_status()
-    data = r.json()
-    markets = data["data"] if isinstance(data, dict) else data
-
-    live_games = []
+    today = pacific_today()
+    r = requests.get(BASE_URL,
+                     params={"limit": 500, "closed": "false", "tag_id": tag_id_nba},
+                     timeout=20, verify=False)
+    markets = r.json()["data"]
+    games = []
     for m in markets:
         slug = (m.get("slug") or "").lower()
-        if "nba" not in slug or not slug.endswith(today):
-            continue
-        for ev in m.get("events", []):
-            if ev.get("live"):
-                live_games.append((m, ev))
-    return live_games
+        if "nba" in slug and slug.endswith(today):
+            for ev in m.get("events", []):
+                if ev.get("live"):
+                    games.append((m, ev))
+    return games
+
+def fetch_live_nhl_games(tag_id_nhl=899):
+    today = pacific_today()
+    r = requests.get(BASE_URL,
+                     params={"limit": 500, "closed": "false", "tag_id": tag_id_nhl},
+                     timeout=20, verify=False)
+    markets = r.json()["data"]
+    games = []
+    for m in markets:
+        slug = (m.get("slug") or "").lower()
+        if "nhl" in slug and slug.endswith(today):
+            for ev in m.get("events", []):
+                if ev.get("live"):
+                    games.append((m, ev))
+    return games
+
 
 
 
