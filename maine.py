@@ -12,7 +12,7 @@ from trader import place_both_sides, monitor_and_cancel
 
 NBA_MAX_WORKERS = 10
 NBA_ENTRY_PRICE = 0.04
-NBA_ENTRY_SIZE = 200.0
+NBA_ENTRY_SIZE = 5.0
 NBA_RESELL_PRICE = 0.60   # Resell at 60¢
 NBA_CANCEL_OTHERS = False  # Keep both sides active (change to True if needed later)
 
@@ -75,6 +75,20 @@ def nba_loop(client):
             for m, ev in games:
                 cid = m.get("id")
                 if cid in traded:
+                    continue
+
+                period = (ev.get("period") or "").lower()
+                elapsed = ev.get("elapsed") or ""
+
+                # --- Skip if game is over (4Q or 0:00 clock) ---
+                if period in ("q4", "4th", "4q"):
+                    if elapsed.strip() == "0:00" or elapsed.strip() == "00:00" or not elapsed:
+                        print(f"[{cid}] Skipping {m.get('question')} (Period={period}, Elapsed={elapsed}) — game ended.")
+                        continue
+
+                # --- Skip if missing live time but likely ended ---
+                if elapsed.strip() in ("0:00", "00:00", "0", "00", ""):
+                    print(f"[{cid}] Skipping {m.get('question')} (Elapsed={elapsed}) — likely finished.")
                     continue
 
                 executor.submit(handle_nba_contest, client, m, ev)
