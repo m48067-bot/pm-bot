@@ -102,47 +102,50 @@ def place_resell(client, token_id, size, question="Unknown Contest", price=0.92,
     print(f"[FAIL] Exhausted {retries} retries (~{retries * delay}s total) for SELL token {token_id}")
     return False
 
-def monitor_and_cancel(client, results, resell_price=None):
+def monitor_and_cancel(client, results, resell_price=None, cancel_others=False):
     """
-    Poll orders. When one fills, cancel the rest and place a resell.
+    Poll orders until one fills.
+      - If cancel_others=True → cancels other open orders in this contest.
+      - If cancel_others=False → keeps all orders active.
+      - If resell_price is set → automatically resells filled side at that price.
     """
-    filled = False
-    while not filled:
+    filled_orders = set()
+
+    while True:
         time.sleep(5)
         for contest_id, token_id, order_id, side, sz in results:
+            if order_id in filled_orders:
+                continue  # skip already-handled orders
+
             try:
                 order_info = client.get_order(order_id)
-                status = order_info.get("status")
+                status = (order_info.get("status") or "").lower()
+                question = order_info.get("question", "Unknown")
+
                 print(f"[DEBUG] Order {order_id} | contest {contest_id} | token {token_id} | status={status}")
 
-                if status == "filled" or status == "MATCHED":
-                    print(f"[FILL] [{order_info.get('question', 'Unknown')}] | order {order_id} | side={side}")
-                    filled = True
-                    # cancel other orders
-                    for cid, tid, oid, _, _ in results:
-                        if oid != order_id:
-                            try:
-                                client.cancel(order_id=oid)
-                                print(f"[CANCEL] Cancelled {oid}")
-                            except Exception as ce:
-                                print(f"[FAIL] Cancel {oid}", ce)
-                    # resell
+                if status in ("filled", "matched"):
+                    print(f"[FILL] [{question}] | order {order_id} | side={side}")
+                    filled_orders.add(order_id)
+
+                    # Cancel other side if user wants that behavior
+                    if cancel_others:
+                        for cid, tid, oid, _, _ in results:
+                            if oid != order_id:
+                                try:
+                                    client.cancel(order_id=oid)
+                                    print(f"[CANCEL] [{question}] Canceled {oid}")
+                                except Exception as ce:
+                                    print(f"[FAIL] Cancel {oid}: {ce}")
+
+                    # Resell logic
                     if resell_price is not None:
-                        place_resell(
-                            client,
-                            token_id,
-                            sz,
-                            question=order_info.get("question", "Unknown"),
-                            price=resell_price
-                        )
+                        place_resell(client, token_id, sz, question=question, price=resell_price)
                     else:
-                        print(f"[INFO] Skipping resell for {order_info.get('question', 'Unknown')} (no resell_price set)")
-                    break
+                        print(f"[INFO] No resell for [{question}] (no resell_price set)")
+
             except Exception as e:
-                print(f"[FAIL] Could not fetch order {order_id}", e)
-
-    return True
-
+                print(f"[FAIL] Could not fetch order {order_id}: {e}")
 
 def monitor_all(client, all_results):
     """
