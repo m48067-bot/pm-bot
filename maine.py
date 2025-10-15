@@ -12,7 +12,7 @@ from trader import place_both_sides, monitor_and_cancel
 
 NBA_MAX_WORKERS = 10
 NBA_ENTRY_PRICE = 0.04
-NBA_ENTRY_SIZE = 200.0
+NBA_ENTRY_SIZE = 400.0
 NBA_RESELL_PRICE = 0.60   # Resell at 60¢
 NBA_CANCEL_OTHERS = False  # Keep both sides active (change to True if needed later)
 
