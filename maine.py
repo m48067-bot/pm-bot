@@ -2,7 +2,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 from auth import init_client
-from markets import fetch_live_nba_games
+from markets import fetch_live_games, fetch_live_nba_games
 from trader import place_both_sides, monitor_and_cancel
 
 
@@ -10,12 +10,71 @@ from trader import place_both_sides, monitor_and_cancel
 # === CONFIGURATION ========================================
 # ==========================================================
 
+# NFL CONFIG
+NFL_MAX_WORKERS = 10
+NFL_ENTRY_PRICE = 0.16
+NFL_ENTRY_SIZE = 7.0
+
+# NBA CONFIG
 NBA_MAX_WORKERS = 10
 NBA_ENTRY_PRICE = 0.04
 NBA_ENTRY_SIZE = 400.0
-NBA_RESELL_PRICE = 0.60   # Resell at 60¢
-NBA_CANCEL_OTHERS = False  # Keep both sides active (change to True if needed later)
+NBA_RESELL_PRICE = 0.60
+NBA_CANCEL_OTHERS = False   # keep both sides active
 
+# ==========================================================
+# === NFL HANDLER LOOP =====================================
+# ==========================================================
+
+def handle_nfl_contest(client, m, ev):
+    """
+    NFL tail-risk logic:
+      - 4Q or 4th quarter
+      - ≤7:00 remaining
+      - ≤6-point score difference
+      - bestBid between 0.15–0.85
+      - places both sides at 0.16
+      - cancels opposite side when filled
+      - no resell orders
+    """
+    cid = m.get("id")
+    question = m.get("question")
+    score = ev.get("score")
+    period = ev.get("period")
+    elapsed = ev.get("elapsed")
+
+    print(f"\n[{cid}] [NFL TRADE] {question} | Score={score} | Period={period} | Elapsed={elapsed}")
+
+    results = place_both_sides(client, m, price=NFL_ENTRY_PRICE, size=NFL_ENTRY_SIZE)
+    if results:
+        monitor_and_cancel(client, results, resell_price=None, cancel_others=True)
+        print(f"[{cid}] [NFL DONE] {question}")
+    else:
+        print(f"[{cid}] [NFL SKIP] Could not place orders.")
+
+
+def nfl_loop(client):
+    """Continuously fetch and trade NFL contests concurrently."""
+    traded = set()
+    executor = ThreadPoolExecutor(max_workers=NFL_MAX_WORKERS)
+
+    while True:
+        try:
+            games = fetch_live_games()
+            print(f"\n=== Qualified NFL contests: {len(games)} ===")
+
+            for m, ev in games:
+                cid = m.get("id")
+                if cid in traded:
+                    continue
+                executor.submit(handle_nfl_contest, client, m, ev)
+                traded.add(cid)
+                print(f"[{cid}] Submitted NFL contest to thread pool.")
+            time.sleep(25)
+
+        except Exception as e:
+            print("[NFL LOOP ERROR]", e)
+            time.sleep(10)
 
 # ==========================================================
 # === NBA HANDLER LOOP =====================================
@@ -109,14 +168,16 @@ def nba_loop(client):
 def main():
     client = init_client()
 
+    nfl_thread = Thread(target=nfl_loop, args=(client,), daemon=True)
     nba_thread = Thread(target=nba_loop, args=(client,), daemon=True)
+
+    nfl_thread.start()
     nba_thread.start()
 
-    print("\n[BOT] NBA trading started (4¢ entry, 60¢ resell, both sides active)...\n")
+    print("\n[BOT] NFL + NBA concurrent trading started...\n")
 
     while True:
         time.sleep(60)
-
 
 if __name__ == "__main__":
     main()

@@ -63,7 +63,7 @@ def is_close_game(ev):
         mins, secs = map(int, elapsed.split(":"))
     except Exception:
         return False
-    if mins > 6 or (mins == 6 and secs > 0):
+    if mins > 7 or (mins == 7 and secs > 0):
         return False
 
     score = ev.get("score")
@@ -82,7 +82,7 @@ def has_reasonable_spread(m):
         bid = float(m.get("bestBid", 0))
     except Exception:
         return False
-    return 0.10 <= bid <= 0.90
+    return 0.15 <= bid <= 0.85
 
 
 # --- Clutch (NFL/CFB) fetcher ---
