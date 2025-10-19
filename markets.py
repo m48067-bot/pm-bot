@@ -1,5 +1,5 @@
 import requests, warnings
-from datetime import datetime
+from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
 warnings.filterwarnings("ignore")
