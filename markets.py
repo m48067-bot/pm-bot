@@ -50,24 +50,28 @@ def _fetch_today_games(tag_id, prefix, limit=500):
     return filtered
 
 
-# --- Game condition logic ---
 def is_close_game(ev):
-    period = ev.get("period", "").lower()
+    period = (ev.get("period") or "").lower()
     if period not in ("q4", "4th", "4q"):
         return False
 
-    elapsed = ev.get("elapsed")
-    if not elapsed:
-        return False
+    elapsed = ev.get("elapsed") or ""
+    score = ev.get("score") or ""
+
+    # Allow missing elapsed — just prioritize Q4 status
+    mins = secs = 999
     try:
-        mins, secs = map(int, elapsed.split(":"))
+        if ":" in elapsed:
+            mins, secs = map(int, elapsed.split(":"))
     except Exception:
-        return False
+        pass
+
+    # Reject only if definitely early Q4 (more than ~7 min left)
     if mins > 7 or (mins == 7 and secs > 0):
         return False
 
-    score = ev.get("score")
-    if not score or "-" not in score:
+    # Score diff logic
+    if "-" not in score:
         return False
     try:
         a, b = map(int, score.split("-"))
@@ -77,15 +81,6 @@ def is_close_game(ev):
     return abs(a - b) <= 15
 
 
-def has_reasonable_spread(m):
-    try:
-        bid = float(m.get("bestBid", 0))
-    except Exception:
-        return False
-    return 0.01 <= bid <= 0.99
-
-
-# --- Clutch (NFL/CFB) fetcher ---
 def fetch_clutch_games(tag_id, prefix):
     today = pacific_today()
     r = requests.get(
@@ -104,6 +99,9 @@ def fetch_clutch_games(tag_id, prefix):
             for ev in m.get("events", []):
                 if ev.get("live") and is_close_game(ev):
                     clutch.append((m, ev))
+                elif ev.get("live"):
+                    # Debug visibility for why a contest was skipped
+                    print(f"[SKIP] {m.get('question')} | Period={ev.get('period')} | Elapsed={ev.get('elapsed')} | Score={ev.get('score')}")
     return clutch
 
 
