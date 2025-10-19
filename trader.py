@@ -104,103 +104,101 @@ def place_resell(client, token_id, size, question="Unknown Contest", price=0.92,
 
 def monitor_and_cancel(client, results, resell_price=None, cancel_others=False):
     """
-    Poll orders. When one fills, optionally cancel others and place a resell.
-    Robust against null or invalid API responses.
+    Monitors orders until one fills, cancels, or the market is no longer live.
+    - Stops if market disappears from live list or all orders are gone.
+    - Optionally cancels other side and/or resells filled token.
     """
     filled = False
-    while not filled:
-        time.sleep(5)
-        for contest_id, token_id, order_id, side, sz in results:
-            try:
-                order_info = client.get_order(order_id)
+    tracked = {r[2]: r for r in results}  # order_id -> tuple
+    league = ""
 
-                # Handle bad responses gracefully
-                if not order_info or not isinstance(order_info, dict):
-                    print(f"[WARN] Null or invalid order info for {order_id}")
+    # --- Try to infer league (NBA vs NFL) once ---
+    if results:
+        try:
+            order_info = client.get_order(results[0][2])
+            if isinstance(order_info, dict):
+                slug = (order_info.get("slug") or "").lower()
+                question = (order_info.get("question") or "").lower()
+                if "nba" in slug or "nba" in question:
+                    league = "nba"
+        except Exception:
+            pass
+
+    print(f"[MONITOR] Tracking {len(tracked)} orders | league={league or 'unknown'}")
+
+    refresh_counter = 0
+    live_ids = set()
+
+    while tracked and not filled:
+        time.sleep(5)
+        refresh_counter += 5
+
+        # --- Periodically refresh live markets (every 15s) ---
+        if refresh_counter >= 15:
+            refresh_counter = 0
+            try:
+                if league == "nba":
+                    live_games = fetch_live_nba_games()
+                else:
+                    live_games = fetch_live_games()
+                live_ids = {m.get("id") for m, _ in live_games}
+            except Exception as e:
+                print(f"[WARN] Could not refresh live list: {e}")
+                live_ids = set()
+
+        # --- Stop monitoring if market no longer active ---
+        if not tracked:
+            print("[INFO] No active orders left — exiting monitor.")
+            return False
+
+        first_cid = next(iter(tracked.values()))[0]
+        if live_ids and first_cid not in live_ids:
+            print(f"[END] Market {first_cid} no longer live or marked closed — exiting monitor.")
+            return False
+
+        # --- Check each tracked order ---
+        for order_id, (contest_id, token_id, _, side, sz) in list(tracked.items()):
+            try:
+                info = client.get_order(order_id)
+                if not info or not isinstance(info, dict):
+                    print(f"[INFO] Order {order_id} invalid/removed — stop tracking.")
+                    tracked.pop(order_id, None)
                     continue
 
-                status = order_info.get("status")
-                print(f"[DEBUG] Order {order_id} | contest {contest_id} | token {token_id} | status={status}")
+                status = (info.get("status") or "").lower()
+                question = info.get("question", "Unknown")
 
-                # Proceed only if it's truly filled
-                if status and status.lower() in ("filled", "matched"):
-                    q = order_info.get("question", "Unknown")
-                    print(f"[FILL] [{q}] | order {order_id} | side={side}")
+                if status in ("filled", "matched"):
+                    print(f"[FILL] [{question}] | order {order_id} | side={side}")
                     filled = True
 
-                    # Optionally cancel the other side
                     if cancel_others:
-                        for cid, tid, oid, _, _ in results:
+                        for oid in list(tracked.keys()):
                             if oid != order_id:
                                 try:
                                     client.cancel(order_id=oid)
-                                    print(f"[CANCEL] Cancelled {oid}")
+                                    print(f"[CANCEL] Cancelled sibling {oid}")
                                 except Exception as ce:
                                     print(f"[FAIL] Cancel {oid}: {ce}")
 
-                    # Try reselling if enabled
                     if resell_price is not None:
-                        from trader import place_resell
-                        place_resell(
-                            client,
-                            token_id,
-                            sz,
-                            question=q,
-                            price=resell_price
-                        )
-                    else:
-                        print(f"[INFO] Skipping resell for {q} (no resell_price set)")
+                        trader.place_resell(client, token_id, sz, question=question, price=resell_price)
+                    return True
 
-                    break
+                if status in ("cancelled", "canceled", "expired"):
+                    print(f"[INFO] [{question}] order {order_id} canceled/expired.")
+                    tracked.pop(order_id, None)
 
             except Exception as e:
-                print(f"[FAIL] Could not fetch or process order {order_id}: {e}")
+                msg = str(e)
+                if "429" in msg:
+                    print(f"[RATE LIMIT] Pausing 10s due to 429 error.")
+                    time.sleep(10)
+                else:
+                    print(f"[FAIL] Could not check order {order_id}: {e}")
 
-    return True
-
-def monitor_all(client, all_results):
-    """
-    Monitor all active orders across contests.
-    If one fills, cancel the others in that contest and place resell.
-    """
-    active = {oid: (cid, tid, side, sz) for cid, tid, oid, side, sz in all_results}
-
-    while active:
-        time.sleep(5)
-        to_remove = []
-
-        for order_id, (contest_id, token_id, side, sz) in list(active.items()):
-            try:
-                order_info = client.get_order(order_id)
-                status = order_info.get("status")
-                print(f"[DEBUG] Order {order_id} | contest {contest_id} | token {token_id} | status={status}")
-
-                if status == "filled" or status == "MATCHED":
-                    print(f"[FILL] {contest_id} | Order {order_id} filled | token {token_id}")
-
-                    # cancel siblings
-                    for other_id, (ocid, otid, _, _) in list(active.items()):
-                        if ocid == contest_id and other_id != order_id:
-                            try:
-                                client.cancel(order_id=other_id)
-                                print(f"[CANCEL] {contest_id} | Cancelled {other_id}")
-                                to_remove.append(other_id)
-                            except Exception as ce:
-                                print(f"[FAIL] Cancel {other_id}", ce)
-
-                    # resell
-                    place_resell(client, token_id, sz)
-
-                    to_remove.append(order_id)
-
-            except Exception as e:
-                print(f"[FAIL] Could not fetch order {order_id}", e)
-
-        for oid in to_remove:
-            active.pop(oid, None)
-
-    print("[DONE] All contests resolved.")
-
+    print("[INFO] Monitor exiting cleanly (no active or filled orders).")
+    return False
 
 
 

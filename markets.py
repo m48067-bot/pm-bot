@@ -74,7 +74,7 @@ def is_close_game(ev):
     except Exception:
         return False
 
-    return abs(a - b) <= 6
+    return abs(a - b) <= 15
 
 
 def has_reasonable_spread(m):
@@ -82,7 +82,7 @@ def has_reasonable_spread(m):
         bid = float(m.get("bestBid", 0))
     except Exception:
         return False
-    return 0.15 <= bid <= 0.85
+    return 0.01 <= bid <= 0.99
 
 
 # --- Clutch (NFL/CFB) fetcher ---
