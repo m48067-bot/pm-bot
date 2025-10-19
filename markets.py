@@ -5,12 +5,10 @@ from zoneinfo import ZoneInfo
 warnings.filterwarnings("ignore")
 BASE_URL = "https://gamma-api.polymarket.com/markets"
 
-
 # --- Pacific date helper ---
 def pacific_today():
     """Return YYYY-MM-DD string in Pacific time."""
     return datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
-
 
 # --- Normalize Polymarket API response ---
 def _normalize_response(r):
@@ -28,10 +26,9 @@ def _normalize_response(r):
         print(f"[ERROR] Could not parse JSON: {e}")
         return []
 
-
-# --- Shared helper ---
+# --- Helper: Fetch today's markets by tag ---
 def _fetch_today_games(tag_id, prefix, limit=500):
-    today = pacific_today()
+    today = date.today().strftime("%Y-%m-%d")
     r = requests.get(
         BASE_URL,
         params={"limit": limit, "closed": "false", "tag_id": tag_id},
@@ -39,50 +36,67 @@ def _fetch_today_games(tag_id, prefix, limit=500):
         verify=False
     )
     r.raise_for_status()
-    markets = _normalize_response(r)
+    data = r.json()
+    markets = data["data"] if isinstance(data, dict) else data
 
     filtered = []
     for m in markets:
         slug = m.get("slug") or ""
-        if slug.startswith(prefix) and slug.endswith(today):
-            for ev in m.get("events", []):
-                filtered.append((m, ev))
+        if not (slug.startswith(prefix) and slug.endswith(today)):
+            continue
+
+        for ev in m.get("events", []):
+            filtered.append((m, ev))
     return filtered
 
-
+# --- Tail-risk logic ---
 def is_close_game(ev):
-    period = (ev.get("period") or "").lower()
-    if period not in ("q4", "4th", "4q"):
+    """
+    Game rule: 4th quarter, ≤5:00 remaining, score diff ≤6.
+    """
+    period = ev.get("period", "").lower()
+    if period not in ("q4", "4th", "4q", "1q"):
         return False
 
-    elapsed = ev.get("elapsed") or ""
-    score = ev.get("score") or ""
+    elapsed = ev.get("elapsed")
+    if not elapsed:
+        return False
 
-    # Allow missing elapsed — just prioritize Q4 status
-    mins = secs = 999
     try:
-        if ":" in elapsed:
-            mins, secs = map(int, elapsed.split(":"))
+        mins, secs = map(int, elapsed.split(":"))
     except Exception:
-        pass
-
-    # Reject only if definitely early Q4 (more than ~7 min left)
-    if mins > 7 or (mins == 7 and secs > 0):
         return False
 
-    # Score diff logic
-    if "-" not in score:
+    if mins > 14 or (mins == 5 and secs > 0):
         return False
+
+    score = ev.get("score")
+    if not score or "-" not in score:
+        return False
+
     try:
         a, b = map(int, score.split("-"))
     except Exception:
         return False
 
-    return abs(a - b) <= 15
+    return abs(a - b) <= 6
 
+def has_reasonable_spread(market):
+    """
+    Require bestBid between 0.10 and 0.90.
+    """
+    try:
+        best_bid = float(market.get("bestBid", 0))
+    except Exception:
+        return False
+    return 0.10 <= best_bid <= 0.90
 
+# --- Main NFL fetcher ---
 def fetch_clutch_games(tag_id, prefix):
-    today = pacific_today()
+    """
+    Fetches all live NFL markets that meet tail-risk criteria.
+    """
+    today = date.today().strftime("%Y-%m-%d")
     r = requests.get(
         BASE_URL,
         params={"limit": 500, "closed": "false", "tag_id": tag_id},
@@ -90,25 +104,27 @@ def fetch_clutch_games(tag_id, prefix):
         verify=False
     )
     r.raise_for_status()
-    markets = _normalize_response(r)
+    data = r.json()
+    markets = data["data"] if isinstance(data, dict) else data
 
-    clutch = []
+    clutch_markets = []
     for m in markets:
         slug = m.get("slug") or ""
-        if slug.startswith(prefix) and slug.endswith(today) and has_reasonable_spread(m):
-            for ev in m.get("events", []):
-                if ev.get("live") and is_close_game(ev):
-                    clutch.append((m, ev))
-                elif ev.get("live"):
-                    # Debug visibility for why a contest was skipped
-                    print(f"[SKIP] {m.get('question')} | Period={ev.get('period')} | Elapsed={ev.get('elapsed')} | Score={ev.get('score')}")
-    return clutch
+        if not (slug.startswith(prefix) and slug.endswith(today)):
+            continue
+        if not has_reasonable_spread(m):
+            continue
+        for ev in m.get("events", []):
+            if ev.get("live") and is_close_game(ev):
+                clutch_markets.append((m, ev))
 
+    return clutch_markets
 
-# --- Public interfaces ---
 def fetch_live_games(tag_id_nfl=100639):
+    """
+    Public interface used by maine.py — fetches only NFL tail-risk contests.
+    """
     return fetch_clutch_games(tag_id_nfl, "nfl")
-
 
 def fetch_live_nba_games(tag_id_nba=745):
     today = pacific_today()
@@ -125,27 +141,6 @@ def fetch_live_nba_games(tag_id_nba=745):
     for m in markets:
         slug = (m.get("slug") or "").lower()
         if "nba" in slug and slug.endswith(today):
-            for ev in m.get("events", []):
-                if ev.get("live"):
-                    games.append((m, ev))
-    return games
-
-
-def fetch_live_nhl_games(tag_id_nhl=899):
-    today = pacific_today()
-    r = requests.get(
-        BASE_URL,
-        params={"limit": 500, "closed": "false", "tag_id": tag_id_nhl},
-        timeout=20,
-        verify=False
-    )
-    r.raise_for_status()
-    markets = _normalize_response(r)
-
-    games = []
-    for m in markets:
-        slug = (m.get("slug") or "").lower()
-        if "nhl" in slug and slug.endswith(today):
             for ev in m.get("events", []):
                 if ev.get("live"):
                     games.append((m, ev))
