@@ -85,11 +85,11 @@ def has_reasonable_spread(market):
         return False
     return 0.15 <= best_bid <= 0.85
 
-# --- NEW: Fetch live NFL moneyline markets (via /events endpoint) ---
 def fetch_live_nfl_markets(tag_id=450, limit=500):
     """
     Fetch today's live NFL moneyline markets (non-spread/total) from /events.
     Returns flattened markets for direct trading use.
+    Includes clutch and reasonable spread filters.
     """
     today = pacific_today()
     r = requests.get(
@@ -110,6 +110,10 @@ def fetch_live_nfl_markets(tag_id=450, limit=500):
         if not ev.get("live") or ev.get("ended"):
             continue
 
+        # ✅ Apply clutch logic (4Q, ≤5 min, ≤8 points)
+        if not is_close_game(ev):
+            continue
+
         # ✅ Keep only moneyline markets (exclude spreads/totals)
         moneyline_markets = [
             m for m in ev.get("markets", [])
@@ -117,10 +121,10 @@ def fetch_live_nfl_markets(tag_id=450, limit=500):
                 k in m.get("question", "").lower()
                 for k in ["spread", "total", "over", "under", "o/u"]
             )
+            and has_reasonable_spread(m)  # ✅ Require bid within range
         ]
 
-        # ✅ Apply clutch logic (4Q, ≤5 min, ≤6 points)
-        if not is_close_game(ev):
+        if not moneyline_markets:
             continue
 
         for m in moneyline_markets:
@@ -134,7 +138,7 @@ def fetch_live_nfl_markets(tag_id=450, limit=500):
             market_list.append(m)
 
     print(f"Pacific date: {today}")
-    print(f"Found {len(market_list)} live NFL clutch moneyline markets\n")
+    print(f"Found {len(market_list)} live NFL clutch moneyline markets (reasonable spread)\n")
     return market_list
 
 # --- NBA Fetcher (unchanged) ---
