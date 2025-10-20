@@ -3,62 +3,95 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 warnings.filterwarnings("ignore")
-BASE_URL = "https://gamma-api.polymarket.com/events"
+BASE_URL_EVENTS = "https://gamma-api.polymarket.com/events"
 
 # --- Pacific date helper ---
 def pacific_today():
-    """Return YYYY-MM-DD string in Pacific time."""
     return datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
 
-# --- Fetch today's live NFL moneyline markets ---
-def fetch_today_live_nfl_moneyline_markets(tag_id=450, limit=500):
-    """Fetch today's *live* NFL markets (moneyline only) via /events."""
+# --- Tail-risk (clutch) logic ---
+def is_close_game(ev):
+    """4th quarter (any time), score diff ≤8."""
+    period = ev.get("period", "").lower()
+    if period not in ("q4", "4th", "4q", "q3", "3q"):
+        return False
+
+    elapsed = ev.get("elapsed")
+    if not elapsed:
+        return False
+    try:
+        mins, secs = map(int, elapsed.split(":"))
+    except Exception:
+        return False
+
+    # Within last 5 minutes of the quarter
+    if mins > 14 or (mins == 5 and secs > 0):
+        return False
+
+    score = ev.get("score")
+    if not score or "-" not in score:
+        return False
+    try:
+        a, b = map(int, score.split("-"))
+    except Exception:
+        return False
+
+    return abs(a - b) <= 8
+
+# --- Fetch & print live NFL clutch contests ---
+def test_nfl_clutch(tag_id=450, limit=500):
     today = pacific_today()
-    r = requests.get(
-        BASE_URL,
-        params={"tag_id": tag_id, "closed": "false", "limit": limit},
-        timeout=20,
-        verify=False
-    )
-    r.raise_for_status()
+    print(f"Pacific date: {today}")
+
+    try:
+        r = requests.get(
+            BASE_URL_EVENTS,
+            params={"tag_id": tag_id, "closed": "false", "limit": limit},
+            timeout=20,
+            verify=False
+        )
+        r.raise_for_status()
+    except Exception as e:
+        print(f"[ERROR] API request failed: {e}")
+        return
+
     data = r.json()
     events = data["data"] if isinstance(data, dict) else data
+    if not events:
+        print("[WARN] No data returned from API.")
+        return
 
-    market_list = []
+    found = []
     for ev in events:
         slug = (ev.get("slug") or "").lower()
         if not (slug.startswith("nfl-") and slug.endswith(today)):
             continue
-        
-        if not ev.get("live"):
+        if not ev.get("live") or ev.get("ended"):
             continue
 
-        # ✅ Keep only moneyline markets (exclude spreads/totals)
+        # Moneyline only
         moneyline_markets = [
             m for m in ev.get("markets", [])
-            if not any(
-                k in m.get("question", "").lower()
-                for k in ["spread", "total", "over", "under", "o/u"]
-            )
+            if not any(k in m.get("question", "").lower()
+                       for k in ["spread", "total", "over", "under", "o/u"])
         ]
+        if not moneyline_markets:
+            continue
 
-        for m in moneyline_markets:
-            # Attach event metadata (useful for scoring context)
-            m["_event_meta"] = {
-                "slug": ev.get("slug"),
-                "score": ev.get("score"),
-                "period": ev.get("period"),
-                "elapsed": ev.get("elapsed"),
-                "live": ev.get("live")
-            }
-            market_list.append(m)
+        if not is_close_game(ev):
+            continue
 
-    print(f"Pacific date: {today}")
-    print(f"Found {len(market_list)} live NFL moneyline markets\n")
-    print(json.dumps(market_list, indent=2))
-    return market_list
+        found.append({
+            "slug": ev.get("slug"),
+            "score": ev.get("score"),
+            "period": ev.get("period"),
+            "elapsed": ev.get("elapsed"),
+            "markets": [m.get("question") for m in moneyline_markets]
+        })
 
-# --- Standalone run ---
+    print(f"\nFound {len(found)} live NFL contests matching relaxed clutch conditions:\n")
+    print(json.dumps(found, indent=2) if found else "None found.")
+
 if __name__ == "__main__":
-    fetch_today_live_nfl_moneyline_markets()
+    test_nfl_clutch()
 
