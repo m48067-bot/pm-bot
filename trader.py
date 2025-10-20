@@ -2,7 +2,7 @@ import json
 import time
 from py_clob_client.clob_types import OrderArgs, OrderType, PostOrdersArgs
 from py_clob_client.order_builder.constants import BUY, SELL
-
+from markets import fetch_live_games
 
 def place_both_sides(client, market, price=0.16, size=10.0):
     """
