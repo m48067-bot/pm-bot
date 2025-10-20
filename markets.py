@@ -53,7 +53,7 @@ def _fetch_today_games(tag_id, prefix, limit=500):
 def is_close_game(ev):
     """4th quarter, ≤5:00 remaining, score diff ≤6."""
     period = ev.get("period", "").lower()
-    if period not in ("q4", "4th", "4q", "3q"):
+    if period not in ("q4", "4th", "4q", "3q", "q3"):
         return False
 
     elapsed = ev.get("elapsed")
