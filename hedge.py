@@ -5,14 +5,11 @@ from zoneinfo import ZoneInfo
 warnings.filterwarnings("ignore")
 BASE_URL = "https://gamma-api.polymarket.com/events"
 
-# --- Pacific date helper ---
 def pacific_today():
-    """Return YYYY-MM-DD string in Pacific time."""
     return datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
 
-# --- Fetch today's live NFL moneyline markets ---
-def fetch_today_live_nfl_moneyline_markets(tag_id=450, limit=500):
-    """Fetch today's *live* NFL markets (moneyline only) via /events."""
+def fetch_today_nfl_moneyline(tag_id=450, limit=500):
+    """Fetch today's NFL events and keep only moneyline markets."""
     today = pacific_today()
     r = requests.get(
         BASE_URL,
@@ -24,16 +21,13 @@ def fetch_today_live_nfl_moneyline_markets(tag_id=450, limit=500):
     data = r.json()
     events = data["data"] if isinstance(data, dict) else data
 
-    market_list = []
+    filtered = []
     for ev in events:
         slug = (ev.get("slug") or "").lower()
         if not (slug.startswith("nfl-") and slug.endswith(today)):
             continue
-        
-        if not ev.get("live"):
-            continue
 
-        # ✅ Keep only moneyline markets (exclude spreads/totals)
+        # ✅ Keep only moneyline markets (no spread/total/over/under)
         moneyline_markets = [
             m for m in ev.get("markets", [])
             if not any(
@@ -42,23 +36,13 @@ def fetch_today_live_nfl_moneyline_markets(tag_id=450, limit=500):
             )
         ]
 
-        for m in moneyline_markets:
-            # Attach event metadata (useful for scoring context)
-            m["_event_meta"] = {
-                "slug": ev.get("slug"),
-                "score": ev.get("score"),
-                "period": ev.get("period"),
-                "elapsed": ev.get("elapsed"),
-                "live": ev.get("live")
-            }
-            market_list.append(m)
+        if moneyline_markets:
+            ev["markets"] = moneyline_markets  # replace with filtered markets only
+            filtered.append(ev)
 
     print(f"Pacific date: {today}")
-    print(f"Found {len(market_list)} live NFL moneyline markets\n")
-    print(json.dumps(market_list, indent=2))
-    return market_list
+    print(f"Found {len(filtered)} NFL events with moneyline markets\n")
+    print(json.dumps(filtered, indent=2))
 
-# --- Standalone run ---
 if __name__ == "__main__":
-    fetch_today_live_nfl_moneyline_markets()
-
+    fetch_today_nfl_moneyline()
