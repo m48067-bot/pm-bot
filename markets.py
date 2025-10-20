@@ -53,7 +53,7 @@ def _fetch_today_games(tag_id, prefix, limit=500):
 def is_close_game(ev):
     """4th quarter, ≤5:00 remaining, score diff ≤6."""
     period = ev.get("period", "").lower()
-    if period not in ("q4", "4th", "4q", "3q", "q3"):
+    if period not in ("q4", "4th", "4q"):
         return False
 
     elapsed = ev.get("elapsed")
@@ -64,7 +64,7 @@ def is_close_game(ev):
     except Exception:
         return False
 
-    if mins > 14 or (mins == 5 and secs > 0):
+    if mins > 5 or (mins == 5 and secs > 0):
         return False
 
     score = ev.get("score")
@@ -75,7 +75,7 @@ def is_close_game(ev):
     except Exception:
         return False
 
-    return abs(a - b) <= 8
+    return abs(a - b) <= 6
 
 def has_reasonable_spread(market):
     """Require bestBid between 0.10 and 0.90."""
@@ -83,7 +83,7 @@ def has_reasonable_spread(market):
         best_bid = float(market.get("bestBid", 0))
     except Exception:
         return False
-    return 0.10 <= best_bid <= 0.90
+    return 0.01 <= best_bid <= 0.99
 
 # --- NEW: Fetch live NFL moneyline markets (via /events endpoint) ---
 def fetch_live_nfl_markets(tag_id=450, limit=500):

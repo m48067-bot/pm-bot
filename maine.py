@@ -48,7 +48,7 @@ def handle_nfl_contest(client, m):
 
     results = place_both_sides(client, m, price=NFL_ENTRY_PRICE, size=NFL_ENTRY_SIZE)
     if results:
-        monitor_and_cancel(client, results, resell_price=None, cancel_others=True)
+        monitor_and_cancel(client, results, resell_price=0.92, cancel_others=True)
         print(f"[{cid}] [NFL DONE] {question}")
     else:
         print(f"[{cid}] [NFL SKIP] Could not place orders.")
