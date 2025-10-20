@@ -107,6 +107,7 @@ def monitor_and_cancel(client, results, resell_price=None, cancel_others=False):
     Monitors orders until one fills, cancels, or the market is no longer live.
     - Stops if market disappears from live list or all orders are gone.
     - Optionally cancels other side and/or resells filled token.
+    Works for both NFL (flat market list) and NBA (tuple list) fetch structures.
     """
     filled = False
     tracked = {r[2]: r for r in results}  # order_id -> tuple
@@ -121,6 +122,8 @@ def monitor_and_cancel(client, results, resell_price=None, cancel_others=False):
                 question = (order_info.get("question") or "").lower()
                 if "nba" in slug or "nba" in question:
                     league = "nba"
+                elif "nfl" in slug or "nfl" in question:
+                    league = "nfl"
         except Exception:
             pass
 
@@ -138,19 +141,24 @@ def monitor_and_cancel(client, results, resell_price=None, cancel_others=False):
             refresh_counter = 0
             try:
                 if league == "nba":
+                    from markets import fetch_live_nba_games
                     live_games = fetch_live_nba_games()
+                    live_ids = {m.get("id") for m, _ in live_games}
                 else:
+                    from markets import fetch_live_games
                     live_games = fetch_live_games()
-                live_ids = {m.get("id") for m, _ in live_games}
+                    live_ids = {m.get("id") for m in live_games}
+                print(f"[REFRESH] Active {league or 'NFL'} markets: {len(live_ids)}")
             except Exception as e:
                 print(f"[WARN] Could not refresh live list: {e}")
                 live_ids = set()
 
-        # --- Stop monitoring if market no longer active ---
+        # --- Stop monitoring if no active orders ---
         if not tracked:
             print("[INFO] No active orders left — exiting monitor.")
             return False
 
+        # --- Stop if market closed ---
         first_cid = next(iter(tracked.values()))[0]
         if live_ids and first_cid not in live_ids:
             print(f"[END] Market {first_cid} no longer live or marked closed — exiting monitor.")
@@ -182,7 +190,8 @@ def monitor_and_cancel(client, results, resell_price=None, cancel_others=False):
                                     print(f"[FAIL] Cancel {oid}: {ce}")
 
                     if resell_price is not None:
-                        trader.place_resell(client, token_id, sz, question=question, price=resell_price)
+                        from trader import place_resell
+                        place_resell(client, token_id, sz, question=question, price=resell_price)
                     return True
 
                 if status in ("cancelled", "canceled", "expired"):
@@ -199,6 +208,7 @@ def monitor_and_cancel(client, results, resell_price=None, cancel_others=False):
 
     print("[INFO] Monitor exiting cleanly (no active or filled orders).")
     return False
+
 
 
 
