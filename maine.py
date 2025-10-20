@@ -26,12 +26,12 @@ NBA_CANCEL_OTHERS = False   # keep both sides active
 # === NFL HANDLER LOOP =====================================
 # ==========================================================
 
-def handle_nfl_contest(client, m, ev):
+def handle_nfl_contest(client, m):
     """
     NFL tail-risk logic:
       - 4Q or 4th quarter
       - ≤7:00 remaining
-      - ≤6-point score difference
+      - ≤8-point score difference
       - bestBid between 0.15–0.85
       - places both sides at 0.16
       - cancels opposite side when filled
@@ -39,6 +39,7 @@ def handle_nfl_contest(client, m, ev):
     """
     cid = m.get("id")
     question = m.get("question")
+    ev = m.get("_event_meta", {})  # event metadata
     score = ev.get("score")
     period = ev.get("period")
     elapsed = ev.get("elapsed")
@@ -63,11 +64,11 @@ def nfl_loop(client):
             games = fetch_live_games()
             print(f"\n=== Qualified NFL contests: {len(games)} ===")
 
-            for m, ev in games:
+            for m in games:  # now just one object, not (m, ev)
                 cid = m.get("id")
                 if cid in traded:
                     continue
-                executor.submit(handle_nfl_contest, client, m, ev)
+                executor.submit(handle_nfl_contest, client, m)
                 traded.add(cid)
                 print(f"[{cid}] Submitted NFL contest to thread pool.")
             time.sleep(25)
