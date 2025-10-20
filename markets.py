@@ -83,7 +83,7 @@ def has_reasonable_spread(market):
         best_bid = float(market.get("bestBid", 0))
     except Exception:
         return False
-    return 0.01 <= best_bid <= 0.99
+    return 0.15 <= best_bid <= 0.85
 
 # --- NEW: Fetch live NFL moneyline markets (via /events endpoint) ---
 def fetch_live_nfl_markets(tag_id=450, limit=500):
