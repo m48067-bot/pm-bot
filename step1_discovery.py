@@ -1,42 +1,33 @@
-import requests
-import warnings
-from datetime import datetime
-from zoneinfo import ZoneInfo
+import asyncio
+import websockets
 import json
 
-warnings.filterwarnings("ignore")
+TOKEN_ID = "79797384925980301204291764463143222887700240966082867554945455886769829331145"
+# Replace with a current YES token
 
-BASE_URL = "https://gamma-api.polymarket.com/markets"
+async def main():
+    uri = "wss://clob.polymarket.com/ws"
 
-def dump_full_nhl_json(tag_id=899, limit=500):
-    """
-    Pulls the complete raw JSON for NHL markets (tag 899) ending with today's
-    date in Pacific Time. Prints the full object with no filtering.
-    """
-    pacific_today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
+    async with websockets.connect(uri) as websocket:
+        print("Connected to Polymarket WebSocket")
 
-    r = requests.get(
-        BASE_URL,
-        params={"limit": limit, "closed": "false", "tag_id": tag_id},
-        timeout=30,
-        verify=False
-    )
-    r.raise_for_status()
-    data = r.json()
+        subscribe_msg = {
+            "type": "subscribe",
+            "channel": "book",
+            "token_id": TOKEN_ID
+        }
 
-    # Filter by 'nhl' slug and today's Pacific date, but dump everything
-    markets = data["data"] if isinstance(data, dict) else data
-    filtered = []
-    for m in markets:
-        slug = (m.get("slug") or "").lower()
-        if "nhl" in slug and slug.endswith(pacific_today):
-            filtered.append(m)
+        await websocket.send(json.dumps(subscribe_msg))
+        print("Subscribed to book updates")
 
-    print(f"Pacific date: {pacific_today}")
-    print(f"Dumping full JSON for {len(filtered)} NHL markets (tag {tag_id})...\n")
+        while True:
+            message = await websocket.recv()
+            data = json.loads(message)
 
-    print(json.dumps(filtered, indent=2))
+            if "bids" in data and "asks" in data:
+                best_bid = float(data["bids"][0]["price"]) if data["bids"] else None
+                best_ask = float(data["asks"][0]["price"]) if data["asks"] else None
 
-if __name__ == "__main__":
-    dump_full_nhl_json()
+                print(f"Best Bid: {best_bid} | Best Ask: {best_ask}")
 
+asyncio.run(main())

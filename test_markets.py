@@ -1,17 +1,44 @@
-import requests, json
-from datetime import datetime
-from zoneinfo import ZoneInfo
+import time
+from initialize import client
 
-BASE_URL_EVENTS = "https://gamma-api.polymarket.com/events"
-today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
+def main():
 
-r = requests.get(BASE_URL_EVENTS, params={"tag_id": 450, "closed": "false", "limit": 500}, verify=False)
-r.raise_for_status()
+    print("Fetching positions...")
+    positions = client.get_positions()
 
-data = r.json()
-events = data["data"] if isinstance(data, dict) and "data" in data else data
-print(f"Found {len(events)} raw NFL events\n")
+    if not positions:
+        print("No positions found.")
+        return
 
-for ev in events:
-    slug = ev.get("slug")
-    print(f"{slug} | live={ev.get('live')} | ended={ev.get('ended')} | period={ev.get('period')} | elapsed={ev.get('elapsed')} | score={ev.get('score')}")
+    redeemable_positions = []
+
+    for p in positions:
+        # Print everything once so you see structure
+        print("\nPOSITION:")
+        for k, v in p.items():
+            print(f"{k}: {v}")
+
+        if p.get("redeemable", False):
+            redeemable_positions.append(p)
+
+    if not redeemable_positions:
+        print("\nNo redeemable positions found.")
+        return
+
+    print(f"\nFound {len(redeemable_positions)} redeemable positions.")
+
+    for p in redeemable_positions:
+        condition_id = p.get("conditionId")
+        print(f"\nRedeeming condition: {condition_id}")
+
+        try:
+            tx = client.redeem(condition_id)
+            print("Redeem TX sent:", tx)
+
+        except Exception as e:
+            print("Redeem failed:", e)
+
+    print("\nDone.")
+
+if __name__ == "__main__":
+    main()
