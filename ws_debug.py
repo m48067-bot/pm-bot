@@ -219,13 +219,31 @@ def on_market_message(ws, message):
 # ================= START =================
 
 def start_trading_bot():
+    print("Trading bot started.")
+
+    # Start poll loop ONCE
     threading.Thread(target=poll_positions_loop, daemon=True).start()
 
-    market_ws = WebSocketApp(
-        WS_MARKET,
-        on_open=on_market_open,
-        on_message=on_market_message
-    )
+    while True:
+        try:
+            print("Connecting to market websocket...")
 
-    market_ws.run_forever(ping_interval=20)
+            market_ws = WebSocketApp(
+                WS_MARKET,
+                on_open=on_market_open,
+                on_message=on_market_message,
+                on_close=lambda ws, code, msg: print(f"Websocket closed: {code} {msg}"),
+                on_error=lambda ws, err: print(f"Websocket error: {err}")
+            )
+
+            market_ws.run_forever(ping_interval=20)
+
+            print("run_forever returned. Connection dropped.")
+
+        except Exception as e:
+            print("Trading bot error:", e)
+
+        print("Reconnecting in 3 seconds...")
+        time.sleep(3)
+
 
