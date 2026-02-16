@@ -18,7 +18,7 @@ ENTRY_TRIGGER = 0.56
 ENTRY_PRICE   = 0.40
 
 STOP_TRIGGER  = 0.15
-STOP_PRICE    = 0.21
+STOP_PRICE    = 0.25
 
 SIZE = 20
 
@@ -202,8 +202,8 @@ def on_market_message(ws, message):
 
         if old > STOP_TRIGGER and best_bid <= STOP_TRIGGER:
 
-            print("\n>>> STOP TRIGGERED <<<")
-            print(f"Selling {current_position_token} @ {STOP_PRICE}")
+            #print("\n>>> STOP TRIGGERED <<<")
+            #print(f"Selling {current_position_token} @ {STOP_PRICE}")
 
             client.create_and_post_order(
                 OrderArgs(
