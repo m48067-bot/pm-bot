@@ -22,7 +22,7 @@ ENTRY_MODE = "same"  # "opposite" or "same"
 STOP_TRIGGER = 0.28
 STOP_PRICE   = 0.25
 
-SIZE = 20
+SIZE = 40
 
 # ================= GLOBALS =================
 
