@@ -19,7 +19,7 @@ ENTRY_PRICE   = 0.55
 
 ENTRY_MODE = "same"  # "opposite" or "same"
 
-STOP_TRIGGER = 0.27
+STOP_TRIGGER = 0.28
 STOP_PRICE   = 0.25
 
 SIZE = 20
