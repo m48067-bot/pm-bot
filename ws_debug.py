@@ -14,7 +14,7 @@ WS_MARKET = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 DATA_API = "https://data-api.polymarket.com"
 USER_ADDRESS = "0x7b9196eF079a8297BCCdd2Eb42c604255ED64Ae4"
 
-ENTRY_TRIGGER = 0.53
+ENTRY_TRIGGER = 0.52
 ENTRY_PRICE   = 0.55
 
 ENTRY_MODE = "same"  # "opposite" or "same"
