@@ -103,12 +103,10 @@ def poll_positions_loop():
                 if current_position_token is not None:
                     print("\n=== POSITION CLOSED ===")
                     print("Resetting entry logic — ready to trade again.")
-
                     entry_submitted_this_market = False
 
                 current_position_token = None
                 position_size = 0
-
 
         except Exception as e:
             print("Position poll error:", e)
@@ -147,102 +145,102 @@ def on_market_message(ws, message):
     global prev_bid, entry_submitted_this_market
     global last_tick_time
 
-    last_tick_time = time.time()
+    try:
+        data = json.loads(message)
 
-    data = json.loads(message)
+        # Ignore batch payloads (sometimes Polymarket sends lists)
+        if isinstance(data, list):
+            return
 
-    if data.get("event_type") != "book":
-        return
+        if not isinstance(data, dict):
+            return
 
-    # Early switch
-    if seconds_to_next_boundary() <= 5:
-        next_slug = get_next_slug()
-        if next_slug != current_slug:
-            switch_market(ws, next_slug)
-        return
+        if data.get("event_type") != "book":
+            return
 
-    asset = data.get("asset_id")
+        # Only update heartbeat on real book data
+        last_tick_time = time.time()
 
-    bids = sorted(
-        data.get("bids", []),
-        key=lambda x: float(x["price"]),
-        reverse=True
-    )
+        # Early switch protection
+        if seconds_to_next_boundary() <= 5:
+            next_slug = get_next_slug()
+            if next_slug != current_slug:
+                switch_market(ws, next_slug)
+            return
 
-    if not bids:
-        return
+        asset = data.get("asset_id")
 
-    best_bid = float(bids[0]["price"])
-    old = prev_bid.get(asset)
+        bids = sorted(
+            data.get("bids", []),
+            key=lambda x: float(x["price"]),
+            reverse=True
+        )
 
-    # ================= ENTRY =================
+        if not bids:
+            return
 
-    if (
-        current_position_token is None
-        and not entry_submitted_this_market
-        and old is not None
-        and seconds_to_next_boundary() > 30
+        best_bid = float(bids[0]["price"])
+        old = prev_bid.get(asset)
 
-    ):
-        if old < ENTRY_TRIGGER and best_bid >= ENTRY_TRIGGER:
+        # ================= ENTRY =================
 
-            if ENTRY_MODE == "opposite":
-                if asset == yes_token:
-                    opposite = no_token
-                    print("\nYES triggered → buying NO")
-                elif asset == no_token:
-                    opposite = yes_token
-                    print("\nNO triggered → buying YES")
+        if (
+            current_position_token is None
+            and not entry_submitted_this_market
+            and old is not None
+            and seconds_to_next_boundary() > 30
+        ):
+            if old < ENTRY_TRIGGER and best_bid >= ENTRY_TRIGGER:
+
+                if ENTRY_MODE == "opposite":
+                    if asset == yes_token:
+                        token_to_buy = no_token
+                        print("\nYES triggered → buying NO")
+                    elif asset == no_token:
+                        token_to_buy = yes_token
+                        print("\nNO triggered → buying YES")
+                    else:
+                        return
                 else:
-                    return
-                token_to_buy = opposite
+                    token_to_buy = asset
+                    print(f"\nTriggered → buying {asset}")
 
-            elif ENTRY_MODE == "same":
-                if asset == yes_token:
-                    print("\nYES triggered → buying YES")
-                elif asset == no_token:
-                    print("\nNO triggered → buying NO")
-                else:
-                    return
-                token_to_buy = asset
+                print(f"ENTRY TRIGGER at {best_bid}")
+                print(f"Submitting BUY @ {ENTRY_PRICE}")
 
-            else:
-                print("Invalid ENTRY_MODE")
-                return
-
-            print(f"ENTRY TRIGGER at {best_bid}")
-            print(f"Submitting BUY @ {ENTRY_PRICE}")
-
-            client.create_and_post_order(
-                OrderArgs(
-                    token_id=token_to_buy,
-                    price=ENTRY_PRICE,
-                    size=SIZE,
-                    side=BUY,
+                client.create_and_post_order(
+                    OrderArgs(
+                        token_id=token_to_buy,
+                        price=ENTRY_PRICE,
+                        size=SIZE,
+                        side=BUY,
+                    )
                 )
-            )
 
-            entry_submitted_this_market = True
+                entry_submitted_this_market = True
 
-    # ================= STOP =================
+        # ================= STOP =================
 
-    if (
-        current_position_token is not None
-        and asset == current_position_token
-        and old is not None
-    ):
-        if old > STOP_TRIGGER and best_bid <= STOP_TRIGGER:
+        if (
+            current_position_token is not None
+            and asset == current_position_token
+            and old is not None
+        ):
+            if old > STOP_TRIGGER and best_bid <= STOP_TRIGGER:
 
-            client.create_and_post_order(
-                OrderArgs(
-                    token_id=current_position_token,
-                    price=STOP_PRICE,
-                    size=position_size,
-                    side=SELL,
+                client.create_and_post_order(
+                    OrderArgs(
+                        token_id=current_position_token,
+                        price=STOP_PRICE,
+                        size=position_size,
+                        side=SELL,
+                    )
                 )
-            )
 
-    prev_bid[asset] = best_bid
+        prev_bid[asset] = best_bid
+
+    except Exception as e:
+        print("Handler error:", e)
 
 # ================= START =================
 
@@ -255,7 +253,7 @@ def start_trading_bot():
         global last_tick_time
         while True:
             if time.time() - last_tick_time > 60:
-                print("No market data for 60 seconds. Restarting process.")
+                print("No book data for 60 seconds. Restarting process.")
                 os._exit(1)
             time.sleep(10)
 
