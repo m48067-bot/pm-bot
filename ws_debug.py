@@ -14,11 +14,13 @@ WS_MARKET = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 DATA_API = "https://data-api.polymarket.com"
 USER_ADDRESS = "0x7b9196eF079a8297BCCdd2Eb42c604255ED64Ae4"
 
-ENTRY_TRIGGER = 0.56
-ENTRY_PRICE   = 0.40
+ENTRY_TRIGGER = 0.55
+ENTRY_PRICE   = 0.50
 
-STOP_TRIGGER  = 0.25
-STOP_PRICE    = 0.25
+ENTRY_MODE = "same"  # "opposite" or "same"
+
+STOP_TRIGGER = 0.27
+STOP_PRICE   = 0.25
 
 SIZE = 20
 
@@ -33,6 +35,9 @@ current_position_token = None
 position_size = 0
 
 entry_submitted_this_market = False
+
+import os
+last_tick_time = time.time()
 
 # ================= TIME =================
 
@@ -65,6 +70,7 @@ def fetch_tokens(slug):
 
 def poll_positions_loop():
     global current_position_token, position_size
+    global entry_submitted_this_market
 
     while True:
         try:
@@ -91,14 +97,18 @@ def poll_positions_loop():
                     print("Size:", position_size)
                     print("Avg:", p.get("avgPrice"))
                     print("Cur:", p.get("curprice"))
-
                     break
 
             if not found:
                 if current_position_token is not None:
                     print("\n=== POSITION CLOSED ===")
+                    print("Resetting entry logic — ready to trade again.")
+
+                    entry_submitted_this_market = False
+
                 current_position_token = None
                 position_size = 0
+
 
         except Exception as e:
             print("Position poll error:", e)
@@ -124,9 +134,9 @@ def switch_market(ws, slug):
     entry_submitted_this_market = False
     current_position_token = None
 
-    print(f"\n==============================")
+    print("\n==============================")
     print(f"SWITCHED TO: {slug}")
-    print(f"==============================")
+    print("==============================")
 
 # ================= MARKET HANDLER =================
 
@@ -135,6 +145,9 @@ def on_market_open(ws):
 
 def on_market_message(ws, message):
     global prev_bid, entry_submitted_this_market
+    global last_tick_time
+
+    last_tick_time = time.time()
 
     data = json.loads(message)
 
@@ -168,16 +181,33 @@ def on_market_message(ws, message):
         current_position_token is None
         and not entry_submitted_this_market
         and old is not None
+        and seconds_to_next_boundary() > 30
+
     ):
         if old < ENTRY_TRIGGER and best_bid >= ENTRY_TRIGGER:
 
-            if asset == yes_token:
-                opposite = no_token
-                print("\nYES triggered → buying NO")
-            elif asset == no_token:
-                opposite = yes_token
-                print("\nNO triggered → buying YES")
+            if ENTRY_MODE == "opposite":
+                if asset == yes_token:
+                    opposite = no_token
+                    print("\nYES triggered → buying NO")
+                elif asset == no_token:
+                    opposite = yes_token
+                    print("\nNO triggered → buying YES")
+                else:
+                    return
+                token_to_buy = opposite
+
+            elif ENTRY_MODE == "same":
+                if asset == yes_token:
+                    print("\nYES triggered → buying YES")
+                elif asset == no_token:
+                    print("\nNO triggered → buying NO")
+                else:
+                    return
+                token_to_buy = asset
+
             else:
+                print("Invalid ENTRY_MODE")
                 return
 
             print(f"ENTRY TRIGGER at {best_bid}")
@@ -185,7 +215,7 @@ def on_market_message(ws, message):
 
             client.create_and_post_order(
                 OrderArgs(
-                    token_id=opposite,
+                    token_id=token_to_buy,
                     price=ENTRY_PRICE,
                     size=SIZE,
                     side=BUY,
@@ -196,14 +226,12 @@ def on_market_message(ws, message):
 
     # ================= STOP =================
 
-    if current_position_token is not None and asset == current_position_token and old is not None:
-
-        #print(f"[STOP CHECK] old={old} new={best_bid} trigger={STOP_TRIGGER}")
-
+    if (
+        current_position_token is not None
+        and asset == current_position_token
+        and old is not None
+    ):
         if old > STOP_TRIGGER and best_bid <= STOP_TRIGGER:
-
-            #print("\n>>> STOP TRIGGERED <<<")
-            #print(f"Selling {current_position_token} @ {STOP_PRICE}")
 
             client.create_and_post_order(
                 OrderArgs(
@@ -219,13 +247,37 @@ def on_market_message(ws, message):
 # ================= START =================
 
 def start_trading_bot():
+    print("Trading bot started.")
+
     threading.Thread(target=poll_positions_loop, daemon=True).start()
 
-    market_ws = WebSocketApp(
-        WS_MARKET,
-        on_open=on_market_open,
-        on_message=on_market_message
-    )
+    def watchdog():
+        global last_tick_time
+        while True:
+            if time.time() - last_tick_time > 60:
+                print("No market data for 60 seconds. Restarting process.")
+                os._exit(1)
+            time.sleep(10)
 
-    market_ws.run_forever(ping_interval=20)
+    threading.Thread(target=watchdog, daemon=True).start()
 
+    while True:
+        try:
+            print("Connecting to market websocket...")
+
+            market_ws = WebSocketApp(
+                WS_MARKET,
+                on_open=on_market_open,
+                on_message=on_market_message,
+                on_close=lambda ws, code, msg: print(f"Websocket closed: {code} {msg}"),
+                on_error=lambda ws, err: print(f"Websocket error: {err}")
+            )
+
+            market_ws.run_forever(ping_interval=20)
+
+            print("Websocket returned. Reconnecting...")
+
+        except Exception as e:
+            print("Websocket crash:", e)
+
+        time.sleep(3)
