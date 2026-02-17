@@ -15,7 +15,7 @@ DATA_API = "https://data-api.polymarket.com"
 USER_ADDRESS = "0x7b9196eF079a8297BCCdd2Eb42c604255ED64Ae4"
 
 ENTRY_TRIGGER = 0.55
-ENTRY_PRICE   = 0.50
+ENTRY_PRICE   = 0.55
 
 ENTRY_MODE = "same"  # "opposite" or "same"
 
