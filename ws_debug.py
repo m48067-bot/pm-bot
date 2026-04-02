@@ -134,7 +134,7 @@ def switch_market(ws, slug):
     }))
 
     current_slug = slug
-    prev_bid = {}
+    prev_bid = {yes_token: 0.50, no_token: 0.50}
     entry_submitted_this_market = False
     stop_submitted_this_market = False
     current_position_token = None
