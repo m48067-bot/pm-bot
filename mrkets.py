@@ -115,7 +115,7 @@ def redeem_all():
     now = int(time.time())
     slugs = set()
     for p in positions:
-        if float(p.get("size", 0)) <= 0:
+        if float(p.get("size", 0)) < 1:
             continue
         slug = p["slug"]
         # Extract timestamp from slug (e.g. btc-updown-5m-1771376100)

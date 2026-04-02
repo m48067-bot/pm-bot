@@ -30,8 +30,13 @@ prev_bid = {}
 current_position_token = None
 position_size = 0
 entry_submitted_this_market = False
+stop_submitted_this_market = False
 last_tick_time = time.time()
 last_pos_log_time = 0
+pos_miss_count = 0
+
+MIN_ORDER_SIZE = 5   # Polymarket minimum
+POS_MISS_THRESHOLD = 3  # consecutive misses before declaring closed
 
 # ================= TIME =================
 
@@ -65,7 +70,8 @@ def fetch_tokens(slug):
 
 def poll_positions_loop():
     global current_position_token, position_size
-    global entry_submitted_this_market, prev_bid, last_pos_log_time
+    global entry_submitted_this_market, stop_submitted_this_market
+    global prev_bid, last_pos_log_time, pos_miss_count
 
     while True:
         try:
@@ -78,12 +84,12 @@ def poll_positions_loop():
 
             found = False
             for p in positions:
-                if p.get("slug") == current_slug and float(p.get("size", 0)) > 0:
+                if p.get("slug") == current_slug and float(p.get("size", 0)) >= 1:
                     found = True
+                    pos_miss_count = 0
                     current_position_token = p.get("asset")
                     position_size = float(p.get("size"))
 
-                    # Only log position every 30 seconds
                     now = time.time()
                     if now - last_pos_log_time >= 30:
                         print(f"[POS] {current_slug} | size={position_size} | avg={p.get('avgPrice')} | cur={p.get('curprice')}")
@@ -92,12 +98,17 @@ def poll_positions_loop():
 
             if not found:
                 if current_position_token is not None:
-                    prev_bid = {}
-                    entry_submitted_this_market = False
-                    print("[POS] Position closed — ready to re-enter")
-
-                current_position_token = None
-                position_size = 0
+                    pos_miss_count += 1
+                    if pos_miss_count >= POS_MISS_THRESHOLD:
+                        prev_bid = {}
+                        entry_submitted_this_market = False
+                        stop_submitted_this_market = False
+                        current_position_token = None
+                        position_size = 0
+                        pos_miss_count = 0
+                        print("[POS] Position closed — ready to re-enter")
+                else:
+                    pos_miss_count = 0
 
         except Exception as e:
             print(f"[POS ERR] {e}")
@@ -125,8 +136,10 @@ def switch_market(ws, slug):
     current_slug = slug
     prev_bid = {}
     entry_submitted_this_market = False
+    stop_submitted_this_market = False
     current_position_token = None
     position_size = 0
+    pos_miss_count = 0
 
     print(f"\n{'='*40}")
     print(f"MARKET: {slug}")
@@ -138,7 +151,7 @@ def on_market_open(ws):
     switch_market(ws, get_current_slug())
 
 def on_market_message(ws, message):
-    global prev_bid, entry_submitted_this_market
+    global prev_bid, entry_submitted_this_market, stop_submitted_this_market
     global last_tick_time
 
     try:
@@ -193,24 +206,27 @@ def on_market_message(ws, message):
         # ================= STOP =================
         if (
             current_position_token is not None
+            and not stop_submitted_this_market
             and asset == current_position_token
             and old is not None
             and old > STOP_TRIGGER
             and best_bid <= STOP_TRIGGER
         ):
+            sell_size = max(MIN_ORDER_SIZE, position_size)
             side_label = "YES" if asset == yes_token else "NO"
             print(f"\n[STOP] {side_label} bid dropped to {best_bid:.2f} (trigger={STOP_TRIGGER})")
-            print(f"[STOP] Selling {position_size} shares @ {STOP_PRICE}")
+            print(f"[STOP] Selling {sell_size} shares @ {STOP_PRICE}")
 
             try:
                 client.create_and_post_order(
                     OrderArgs(
                         token_id=current_position_token,
                         price=STOP_PRICE,
-                        size=position_size,
+                        size=sell_size,
                         side=SELL,
                     )
                 )
+                stop_submitted_this_market = True
             except Exception as e:
                 print(f"[STOP ERR] {e}")
 
