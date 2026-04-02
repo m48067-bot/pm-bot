@@ -203,7 +203,7 @@ def on_market_message(ws, message):
             except Exception as e:
                 print(f"[ENTRY ERR] {e}")
 
-        # ================= STOP =================
+        # ================= STOP (hedge opposite side) =================
         if (
             current_position_token is not None
             and not stop_submitted_this_market
@@ -212,18 +212,19 @@ def on_market_message(ws, message):
             and old > STOP_TRIGGER
             and best_bid <= STOP_TRIGGER
         ):
-            sell_size = position_size
-            side_label = "YES" if asset == yes_token else "NO"
-            print(f"\n[STOP] {side_label} bid dropped to {best_bid:.2f} (trigger={STOP_TRIGGER})")
-            print(f"[STOP] Selling {sell_size} shares @ {STOP_PRICE}")
+            hedge_token = no_token if current_position_token == yes_token else yes_token
+            hedge_label = "NO" if current_position_token == yes_token else "YES"
+            held_label = "YES" if current_position_token == yes_token else "NO"
+            print(f"\n[STOP] {held_label} bid dropped to {best_bid:.2f} (trigger={STOP_TRIGGER})")
+            print(f"[STOP] Buying {SIZE} {hedge_label} shares @ {STOP_PRICE} to hedge")
 
             try:
                 client.create_and_post_order(
                     OrderArgs(
-                        token_id=current_position_token,
+                        token_id=hedge_token,
                         price=STOP_PRICE,
-                        size=sell_size,
-                        side=SELL,
+                        size=SIZE,
+                        side=BUY,
                     )
                 )
                 stop_submitted_this_market = True
