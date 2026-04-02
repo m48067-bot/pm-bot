@@ -1,40 +1,35 @@
 import threading
 import time
+import traceback
 
 from ws_debug import start_trading_bot
 from mrkets import redeem_all
 
 
 def start_redeem_loop():
-    print("Redeem loop started.")
-
+    """Redeem resolved positions every 30 seconds, never crash."""
+    print("Redeem loop started")
     while True:
         try:
             redeem_all()
         except Exception as e:
-            print("Redeem loop error:", e)
-
+            print(f"[REDEEM ERR] {e}")
+            traceback.print_exc()
         time.sleep(30)
 
 
 def main():
-    print("Starting Polymarket Master Bot")
+    print("="*40)
+    print("POLYMARKET MASTER BOT")
+    print("="*40)
 
-    trading_thread = threading.Thread(
-        target=start_trading_bot,
-        daemon=True
-    )
+    # Start redeem in background
+    threading.Thread(target=start_redeem_loop, daemon=True).start()
 
-    redeem_thread = threading.Thread(
-        target=start_redeem_loop,
-        daemon=True
-    )
-
-    trading_thread.start()
-    redeem_thread.start()
-
-    while True:
-        time.sleep(60)
+    # Run trading bot in main thread — its internal while-loop
+    # handles reconnects, and the watchdog calls os._exit(1) if
+    # the websocket goes silent for 60s, which lets systemd restart us.
+    start_trading_bot()
 
 
 if __name__ == "__main__":

@@ -1,14 +1,22 @@
-# Ignore virtual environments
+# Secrets
+.env
+
+# Virtual environments
 .venv/
 venv/
 
-# Ignore Python caches
+# Python
 __pycache__/
 *.pyc
 *.pyo
 
-# Ignore logs
+# Data
+data/
+*.parquet
+
+# Logs
 *.log
 
-# Ignore secrets
-.env
+# Notebooks
+*.ipynb
+.ipynb_checkpoints/

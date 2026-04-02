@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import requests
 from dotenv import load_dotenv
@@ -13,7 +14,7 @@ from py_builder_signing_sdk.sdk_types import BuilderApiKeyCreds
 
 load_dotenv()
 
-PRIVATE_KEY = os.getenv("PRIVATE_KEY")
+PRIVATE_KEY = os.getenv("private_key")
 POLY_BUILDER_API_KEY = os.getenv("POLY_BUILDER_API_KEY")
 POLY_BUILDER_SECRET = os.getenv("POLY_BUILDER_SECRET")
 POLY_BUILDER_PASSPHRASE = os.getenv("POLY_BUILDER_PASSPHRASE")
@@ -104,55 +105,80 @@ def redeem_all():
 
     response = requests.get(
         f"{DATA_API}/positions",
-        params={"user": proxy_address, "sizeThreshold": 0}
+        params={"user": proxy_address, "sizeThreshold": 0},
+        timeout=10,
     )
 
     positions = response.json()
 
-    print("Positions returned:", len(positions))
+    # Only try to redeem positions whose 5-min window has ended
+    now = int(time.time())
+    slugs = set()
+    for p in positions:
+        if float(p.get("size", 0)) <= 0:
+            continue
+        slug = p["slug"]
+        # Extract timestamp from slug (e.g. btc-updown-5m-1771376100)
+        try:
+            ts = int(slug.rsplit("-", 1)[1])
+            if ts + 300 < now:  # Only if 5-min window has fully ended
+                slugs.add(slug)
+        except (ValueError, IndexError):
+            slugs.add(slug)  # Non-standard slug, try anyway
 
-    slugs = {p["slug"] for p in positions if float(p.get("size", 0)) > 0}
-    print("Detected slugs:", slugs)
+    print(f"Positions: {len(positions)} total, {len(slugs)} expired to redeem")
 
     if not slugs:
         return
 
+    redeemed = 0
     for slug in slugs:
 
         try:
-            print("\nChecking slug:", slug)
-
             event = requests.get(
-                f"{GAMMA_API}/events/slug/{slug}"
+                f"{GAMMA_API}/events/slug/{slug}",
+                timeout=10,
             ).json()
 
             market = event["markets"][0]
-
-            print("UMA Status:", market.get("umaResolutionStatus"))
 
             if market.get("umaResolutionStatus") != "resolved":
                 continue
 
             condition_id = market.get("conditionId")
-            print("Condition ID:", condition_id)
-
             if not condition_id:
                 continue
 
-            print("Redeeming:", slug)
+            print(f"Redeeming: {slug}")
 
             tx = build_redeem_tx(condition_id)
-
             response = client.execute([tx])
             result = response.wait()
 
             if result:
-                print("Raw result:", result)
+                redeemed += 1
+                tx_hash = result.get('transactionHash', 'unknown')[:16] if isinstance(result, dict) else 'ok'
+                print(f"[REDEEMED] {slug} | tx={tx_hash}...")
 
+            # Rate limit: wait between redeems
+            time.sleep(10)
 
         except Exception as e:
-            print("Error processing", slug, e)
+            msg = str(e)
+            # If quota exhausted, stop trying until reset
+            if "429" in msg or "quota exceeded" in msg:
+                match = re.search(r"resets in (\d+) seconds", msg)
+                if match:
+                    wait = int(match.group(1))
+                    print(f"[REDEEM] Quota exhausted — waiting {wait//3600}h {(wait%3600)//60}m")
+                    time.sleep(min(wait + 10, 3600))  # Wait up to 1 hour max per cycle
+                else:
+                    print("[REDEEM] Rate limited — waiting 10 min")
+                    time.sleep(600)
+                return  # Exit loop, try again next cycle
+            else:
+                print(f"[REDEEM ERR] {slug}: {e}")
+                time.sleep(15)
 
-# ================= LOOP =================
-
-
+    if redeemed:
+        print(f"[REDEEM] Redeemed {redeemed} positions this cycle")
