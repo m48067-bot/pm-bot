@@ -212,7 +212,7 @@ def on_market_message(ws, message):
             and old > STOP_TRIGGER
             and best_bid <= STOP_TRIGGER
         ):
-            sell_size = max(MIN_ORDER_SIZE, position_size)
+            sell_size = position_size
             side_label = "YES" if asset == yes_token else "NO"
             print(f"\n[STOP] {side_label} bid dropped to {best_bid:.2f} (trigger={STOP_TRIGGER})")
             print(f"[STOP] Selling {sell_size} shares @ {STOP_PRICE}")
