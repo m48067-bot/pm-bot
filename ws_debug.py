@@ -215,15 +215,16 @@ def on_market_message(ws, message):
             hedge_token = no_token if current_position_token == yes_token else yes_token
             hedge_label = "NO" if current_position_token == yes_token else "YES"
             held_label = "YES" if current_position_token == yes_token else "NO"
+            reverse_size = SIZE * 2
             print(f"\n[STOP] {held_label} bid dropped to {best_bid:.2f} (trigger={STOP_TRIGGER})")
-            print(f"[STOP] Buying {SIZE} {hedge_label} shares @ {STOP_PRICE} to hedge")
+            print(f"[STOP] Reversing: buying {reverse_size} {hedge_label} shares @ market")
 
             try:
                 client.create_and_post_order(
                     OrderArgs(
                         token_id=hedge_token,
-                        price=STOP_PRICE,
-                        size=SIZE,
+                        price=0.50,
+                        size=reverse_size,
                         side=BUY,
                     )
                 )
